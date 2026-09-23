@@ -1,0 +1,180 @@
+1.
+sudo -u postgres psql
+
+postgres=# CREATE ROLE library_guest;
+CREATE ROLE
+
+postgres=# \du
+                               List of roles
+   Role name   |                         Attributes                         
+---------------+------------------------------------------------------------
+ library_guest | Cannot login
+ postgres      | Superuser, Create role, Create DB, Replication, Bypass RLS
+ 
+postgres=# \q
+
+psql -U library_guest
+psql: error: connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: FATAL:  Peer authentication failed for user "library_guest"
+
+2.
+sudo -u postgres psql
+
+postgres=# CREATE ROLE library_staff LOGIN PASSWORD 'library123';
+CREATE ROLE
+
+postgres=# \du
+                               List of roles
+   Role name   |                         Attributes                         
+---------------+------------------------------------------------------------
+ library_guest | Cannot login
+ library_staff | 
+ postgres      | Superuser, Create role, Create DB, Replication, Bypass RLS
+ 
+
+postgres=# SELECT rolname, rolcanlogin FROM pg_roles WHERE rolname IN ('library_guest', 'library_staff');
+
+    rolname    | rolcanlogin 
+---------------+-------------
+ library_guest | f
+ library_staff | t
+(2 rows)
+
+postgres=# \q
+
+psql -h localhost -U library_staff -d postgres
+Password for user library_staff: 
+psql (17.7 (Ubuntu 17.7-0ubuntu0.25.04.1))
+SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, compression: off, ALPN: postgresql)
+Type "help" for help.
+
+postgres=> 
+
+\l
+
+                                                   List of databases
+   Name    |  Owner   | Encoding | Locale Provider |   Collate   |    Ctype    | Locale | ICU Rules |   Access privileges   
+-----------+----------+----------+-----------------+-------------+-------------+--------+-----------+-----------------------
+ postgres  | postgres | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ template0 | postgres | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | =c/postgres          +
+           |          |          |                 |             |             |        |           | postgres=CTc/postgres
+ template1 | postgres | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | =c/postgres          +
+           |          |          |                 |             |             |        |           | postgres=CTc/postgres
+(3 rows)
+
+postgres=> \q
+
+3.
+sudo -u postgres psql
+
+postgres=# CREATE DATABASE library_db
+postgres-# ;
+CREATE DATABASE
+
+\l
+   Name    |  Owner   | Encoding | Locale Provider |   Collate   |    Ctype    | Locale | ICU Rules |   Access privileges   
+------------+----------+----------+-----------------+-------------+-------------+--------+-----------+-----------------------
+ library_db | postgres | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ postgres   | postgres | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ template0  | postgres | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | =c/postgres          +
+            |          |          |                 |             |             |        |           | postgres=CTc/postgres
+ template1  | postgres | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | =c/postgres          +
+            |          |          |                 |             |             |        |           | postgres=CTc/postgres
+(4 rows)
+
+postgres=# \c library_db
+You are now connected to database "library_db" as user "postgres".
+library_db=# 
+
+4.
+
+library_db=# CREATE TABLE books (
+    book_id INTEGER,
+    title TEXT,
+    author VARCHAR(100),
+    price NUMERIC(10,2),
+    in_stock BOOLEAN,
+    published_on DATE,
+    added_at TIMESTAMPTZ
+);
+CREATE TABLE
+
+library_db=# \d books
+                           Table "public.books"
+    Column    |           Type           | Collation | Nullable | Default 
+--------------+--------------------------+-----------+----------+---------
+ book_id      | integer                  |           |          | 
+ title        | text                     |           |          | 
+ author       | character varying(100)   |           |          | 
+ price        | numeric(10,2)            |           |          | 
+ in_stock     | boolean                  |           |          | 
+ published_on | date                     |           |          | 
+ added_at     | timestamp with time zone |           |          | 
+
+5.
+
+library_db=# INSERT INTO books
+(book_id, title, author, price, in_stock, published_on, added_at)
+VALUES
+(1, 'The Hobbit', 'J.R.R. Tolkien', 24.99, TRUE, '1937-09-21', CURRENT_TIMESTAMP),
+(2, '1984', 'George Orwell', 18.50, TRUE, '1949-06-08', CURRENT_TIMESTAMP),
+(3, 'Norwegian Wood', 'Haruki Murakami', 22.00, FALSE, '1987-09-04', CURRENT_TIMESTAMP);
+INSERT 0 3
+
+SELECT * FROM books;
+
+ book_id |     title      |     author      | price | in_stock | published_on |           added_at            
+---------+----------------+-----------------+-------+----------+--------------+-------------------------------
+       1 | The Hobbit     | J.R.R. Tolkien  | 24.99 | t        | 1937-09-21   | 2026-09-23 14:35:58.377559+04
+       2 | 1984           | George Orwell   | 18.50 | t        | 1949-06-08   | 2026-09-23 14:35:58.377559+04
+       3 | Norwegian Wood | Haruki Murakami | 22.00 | f        | 1987-09-04   | 2026-09-23 14:35:58.377559+04
+(3 rows)
+
+library_db=# SELECT title, price
+FROM books
+WHERE in_stock = TRUE;
+   title    | price 
+------------+-------
+ The Hobbit | 24.99
+ 1984       | 18.50
+(2 rows)
+
+library_db=# \du
+                               List of roles
+   Role name   |                         Attributes                         
+---------------+------------------------------------------------------------
+ library_guest | Cannot login
+ library_staff | 
+ postgres      | Superuser, Create role, Create DB, Replication, Bypass RLS
+
+library_db=# GRANT SELECT ON TABLE books TO library_staff;
+GRANT
+
+psql -h localhost -U library_staff -d library_db
+Password for user library_staff: 
+psql (17.7 (Ubuntu 17.7-0ubuntu0.25.04.1))
+SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, compression: off, ALPN: postgresql)
+Type "help" for help.
+
+SELECT * FROM books;
+
+
+ book_id |     title      |     author      | price | in_stock | published_on |           added_at            
+---------+----------------+-----------------+-------+----------+--------------+-------------------------------
+       1 | The Hobbit     | J.R.R. Tolkien  | 24.99 | t        | 1937-09-21   | 2026-09-23 14:35:58.377559+04
+       2 | 1984           | George Orwell   | 18.50 | t        | 1949-06-08   | 2026-09-23 14:35:58.377559+04
+       3 | Norwegian Wood | Haruki Murakami | 22.00 | f        | 1987-09-04   | 2026-09-23 14:35:58.377559+04
+(3 rows)
+
+
+library_db=> INSERT INTO books
+(book_id, title, author, price, in_stock, published_on, added_at)
+VALUES
+(4, 'Dune', 'Frank Herbert', 25.00, TRUE, '1965-08-01', CURRENT_TIMESTAMP);
+ERROR:  permission denied for table books
+
+
+
+
+
+
+
