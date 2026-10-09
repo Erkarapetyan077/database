@@ -1,11 +1,18 @@
-const { Enrollment, Course } = require("../models");
+const { Enrollment, Course, User } = require("../models");
+
 const AppError = require("../utils/AppError");
 const ROLES = require("../constants/roles");
+
 const {
   ALREADY_ENROLLED,
   COURSE_NOT_PUBLISHED,
   COURSE_NOT_FOUND,
   ONLY_STUDENTS_CAN_ENROLL,
+  INVALID_PROGRESS,
+  ENROLLMENT_NOT_FOUND,
+  FORBIDDEN_ENROLLMENT_ACCESS,
+  CANCELLED_ENROLLMENT_CANNOT_BE_UPDATED,
+  FORBIDDEN_COURSE_ACCESS,
 } = require("../constants/errors/enrollment.errors");
 
 const enrollInCourse = async (courseId, currentUser) => {
@@ -17,6 +24,9 @@ const enrollInCourse = async (courseId, currentUser) => {
 
   if (!course) {
     throw new AppError(COURSE_NOT_FOUND, 404);
+  }
+  if (course.instructorId === currentUser.id) {
+    throw new AppError(FORBIDDEN_COURSE_ACCESS, 403);
   }
 
   if (!course.isPublished) {
@@ -56,6 +66,13 @@ const getMyEnrollments = async (currentUser) => {
     include: [
       {
         model: Course,
+        include: [
+          {
+            model: User,
+            as: "instructor",
+            attributes: ["id", "fullName", "email"],
+          },
+        ],
       },
     ],
   });
@@ -86,6 +103,10 @@ const updateEnrollmentProgress = async (
     throw new AppError(FORBIDDEN_ENROLLMENT_ACCESS, 403);
   }
 
+  if (enrollment.status === "cancelled") {
+    throw new AppError(CANCELLED_ENROLLMENT_CANNOT_BE_UPDATED, 400);
+  }
+
   enrollment.progress = progress;
 
   if (progress === 100) {
@@ -97,8 +118,47 @@ const updateEnrollmentProgress = async (
   return enrollment;
 };
 
+const cancelEnrollment = async (enrollmentId, currentUser) => {
+  const enrollment = await Enrollment.findByPk(enrollmentId);
+
+  if (!enrollment) {
+    throw new AppError(ENROLLMENT_NOT_FOUND, 404);
+  }
+
+  if (
+    currentUser.role !== ROLES.ADMIN &&
+    enrollment.userId !== currentUser.id
+  ) {
+    throw new AppError(FORBIDDEN_ENROLLMENT_ACCESS, 403);
+  }
+
+  enrollment.status = "cancelled";
+
+  await enrollment.save();
+
+  return enrollment;
+};
+
+const getAllEnrollments = async () => {
+  const enrollments = await Enrollment.findAll({
+    include: [
+      {
+        model: User,
+        attributes: ["id", "fullName", "email", "role"],
+      },
+      {
+        model: Course,
+      },
+    ],
+  });
+
+  return enrollments;
+};
+
 module.exports = {
   enrollInCourse,
   getMyEnrollments,
   updateEnrollmentProgress,
+  cancelEnrollment,
+  getAllEnrollments,
 };

@@ -8,4 +8,6 @@ module.exports = {
   ENROLLMENT_NOT_FOUND: "Enrollment not found",
   FORBIDDEN_ENROLLMENT_ACCESS: "You do not have access to this enrollment",
   INVALID_PROGRESS: "Progress must be between 0 and 100",
+  CANCELLED_ENROLLMENT_CANNOT_BE_UPDATED:
+    "Cancelled enrollment cannot be updated",
 };
