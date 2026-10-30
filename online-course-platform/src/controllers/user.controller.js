@@ -1,9 +1,10 @@
+const { pagination } = require("../utils/validation");
 const userService = require("../services/user.service");
 
 const getUsers = async (req, res) => {
   const role = req.query.role;
 
-  const users = await userService.getUsers(role);
+  const users = await userService.getUsers(role, pagination(req.query));
 
   res.json({
     success: true,
@@ -14,7 +15,7 @@ const getUsers = async (req, res) => {
 const getUserById = async (req, res) => {
   const id = req.params.id;
 
-  const user = await userService.getUsersById(id);
+  const user = await userService.getUserById(id);
 
   res.json({
     success: true,
@@ -26,7 +27,7 @@ const updateUserRole = async (req, res) => {
   const id = req.params.id;
   const role = req.body.role;
 
-  const user = await userService.updateUserRole(id, role);
+  const user = await userService.updateUserRole(id, role, req.user.id);
 
   res.json({
     success: true,

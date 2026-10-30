@@ -34,6 +34,7 @@ const Course = sequelize.define(
 
     price: {
       type: DataTypes.DECIMAL(10, 2),
+      validate: { min: 0 },
       allowNull: false,
     },
 

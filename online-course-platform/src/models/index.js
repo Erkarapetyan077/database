@@ -6,11 +6,13 @@ const Enrollment = require("./enrollment.model");
 User.hasMany(Course, {
   as: "courses",
   foreignKey: "instructorId",
+  onDelete: "RESTRICT",
 });
 
 Course.belongsTo(User, {
   as: "instructor",
   foreignKey: "instructorId",
+  onDelete: "RESTRICT",
 });
 
 Course.hasMany(Lesson, {

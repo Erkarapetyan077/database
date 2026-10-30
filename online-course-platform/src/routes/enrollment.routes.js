@@ -10,7 +10,11 @@ const {
 const { authenticate, authorize } = require("../middlewares/auth.middleware");
 const ROLES = require("../constants/roles");
 
+const { validateId } = require("../middlewares/validateRequest");
+
 const router = express.Router();
+router.param("id", validateId);
+router.param("courseId", validateId);
 
 router.get(
   "/me",

@@ -1,19 +1,21 @@
 const bcrypt = require("bcryptjs");
+const validation = require("../utils/validation");
 
 const { sequelize } = require("../config/database");
 const { User, Course, Lesson } = require("../models");
 
 async function seed() {
   try {
+    if (process.env.NODE_ENV === "production") throw new Error("Seeding is disabled in production");
+    const seedPassword = process.env.SEED_PASSWORD;
+    validation.credentials("seed@example.com", seedPassword, true);
     await sequelize.authenticate();
 
     console.log("Database connected");
 
-    await sequelize.sync();
+    const password = await bcrypt.hash(seedPassword, 10);
 
-    const password = await bcrypt.hash("Password123!", 10);
-
-    const [admin] = await User.findOrCreate({
+    await User.findOrCreate({
       where: {
         email: "admin@example.com",
       },

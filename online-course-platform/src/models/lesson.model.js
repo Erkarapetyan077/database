@@ -48,6 +48,7 @@ const Lesson = sequelize.define(
   {
     tableName: "lessons",
     timestamps: true,
+    indexes: [{ name: "lessons_course_order_unique", unique: true, fields: ["courseId", "order"] }],
   }
 );
 

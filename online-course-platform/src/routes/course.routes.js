@@ -1,6 +1,9 @@
 const express = require("express");
 
+const { validateId } = require("../middlewares/validateRequest");
+
 const router = express.Router();
+router.param("id", validateId);
 
 const {
   getCourses,

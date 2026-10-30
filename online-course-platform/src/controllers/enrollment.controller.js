@@ -1,3 +1,4 @@
+const { pagination } = require("../utils/validation");
 const enrollmentService = require("../services/enrollment.service");
 
 const enrollInCourse = async (req, res) => {
@@ -16,9 +17,12 @@ const enrollInCourse = async (req, res) => {
 };
 
 const getMyEnrollments = async (req, res) => {
-  let currentUser = req.user;
+  const currentUser = req.user;
 
-  const myEnrollments = await enrollmentService.getMyEnrollments(currentUser);
+  const myEnrollments = await enrollmentService.getMyEnrollments(
+    currentUser,
+    pagination(req.query)
+  );
 
   res.json({
     success: true,
@@ -59,7 +63,7 @@ const cancelEnrollment = async (req, res) => {
 };
 
 const getAllEnrollments = async (req, res) => {
-  const enrollments = await enrollmentService.getAllEnrollments();
+  const enrollments = await enrollmentService.getAllEnrollments(pagination(req.query));
 
   res.json({
     success: true,

@@ -1,3 +1,4 @@
+const { pagination } = require("../utils/validation");
 const lessonService = require("../services/lesson.service");
 
 const getCourseLessons = async (req, res) => {
@@ -5,7 +6,11 @@ const getCourseLessons = async (req, res) => {
 
   const currentUser = req.user;
 
-  const lessons = await lessonService.getCourseLessons(courseId, currentUser);
+  const lessons = await lessonService.getCourseLessons(
+    courseId,
+    currentUser,
+    pagination(req.query)
+  );
 
   res.json({
     success: true,

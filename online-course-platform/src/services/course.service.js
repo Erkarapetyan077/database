@@ -7,18 +7,25 @@ const ROLES = require("../constants/roles");
 const { Course, Lesson, User } = require("../models");
 const AppError = require("../utils/AppError");
 
-const getCourses = async ({ category, level }) => {
+const validation = require("../utils/validation");
+
+const getCourses = async ({ category, level, ...pagination }) => {
   const where = {
     isPublished: true,
   };
-  if (category) {
+  if (category !== undefined) {
+    validation.text(category, "category");
     where.category = category;
   }
-  if (level) {
+  if (level !== undefined) {
+    validation.choice(level, "level", ["beginner", "intermediate", "advanced"]);
     where.level = level;
   }
   const courses = await Course.findAll({
     where,
+    ...pagination,
+    subQuery: false,
+    order: [["id", "ASC"]],
     include: [
       {
         model: User,
@@ -43,6 +50,7 @@ const getCourses = async ({ category, level }) => {
 };
 
 const createCourse = async (data, instructorId) => {
+  validation.course(data);
   const course = await Course.create({
     title: data.title,
     description: data.description,
@@ -67,50 +75,44 @@ const getCourseById = async (id) => {
       {
         model: Lesson,
         as: "lessons",
+        attributes: ["id", "title", "duration", "order", "courseId"],
         separate: true,
         order: [["order", "ASC"]],
       },
     ],
   });
 
+  if (!course || !course.isPublished) throw new AppError(COURSE_NOT_FOUND, 404);
   return course;
 };
 
-const getMyCourses = async (id) => {
+const getMyCourses = async (id, pagination) => {
   const courses = await Course.findAll({
     where: {
       instructorId: id,
     },
+    ...pagination,
+    order: [["id", "ASC"]],
   });
   return courses;
 };
 
-const getCourseStudents = async (courseId, currentUser) => {
-  const course = await Course.findByPk(courseId, {
-    include: [
-      {
-        model: User,
-        as: "students",
-        attributes: ["id", "fullName", "email"],
-        through: {
-          attributes: ["status", "progress"],
-        },
-      },
-    ],
-  });
-  if (!course) {
-    throw new AppError(COURSE_NOT_FOUND, 404);
-  }
-  if (
-    currentUser.role !== ROLES.ADMIN &&
-    course.instructorId != currentUser.id
-  ) {
+const getCourseStudents = async (courseId, currentUser, pagination) => {
+  const course = await Course.findByPk(courseId);
+  if (!course) throw new AppError(COURSE_NOT_FOUND, 404);
+  if (currentUser.role !== ROLES.ADMIN && course.instructorId !== currentUser.id) {
     throw new AppError(FORBIDDEN_COURSE_ACCESS, 403);
   }
-  return course.students;
+  return course.getStudents({
+    attributes: ["id", "fullName", "email"],
+    joinTableAttributes: ["status", "progress"],
+    ...pagination,
+    order: [["id", "ASC"]],
+  });
 };
 
 const createLesson = async (courseId, data, currentUser) => {
+  validation.lesson(data);
   const course = await Course.findByPk(courseId);
 
   if (!course) {
@@ -119,7 +121,7 @@ const createLesson = async (courseId, data, currentUser) => {
 
   if (
     currentUser.role !== ROLES.ADMIN &&
-    course.instructorId != currentUser.id
+    course.instructorId !== currentUser.id
   ) {
     throw new AppError(FORBIDDEN_COURSE_ACCESS, 403);
   }
@@ -137,6 +139,7 @@ const createLesson = async (courseId, data, currentUser) => {
 };
 
 const updateCourse = async (id, data, currentUser) => {
+  validation.course(data, true);
   const course = await Course.findByPk(id);
 
   if (!course) {
@@ -145,7 +148,7 @@ const updateCourse = async (id, data, currentUser) => {
 
   if (
     currentUser.role !== ROLES.ADMIN &&
-    course.instructorId != currentUser.id
+    course.instructorId !== currentUser.id
   ) {
     throw new AppError(FORBIDDEN_COURSE_ACCESS, 403);
   }
@@ -170,7 +173,7 @@ const deleteCourse = async (id, currentUser) => {
   }
   if (
     currentUser.role !== ROLES.ADMIN &&
-    course.instructorId != currentUser.id
+    course.instructorId !== currentUser.id
   ) {
     throw new AppError(FORBIDDEN_COURSE_ACCESS, 403);
   }

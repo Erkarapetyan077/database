@@ -1,3 +1,4 @@
+const validation = require("../utils/validation");
 const bcrypt = require("bcryptjs");
 
 const { generateToken } = require("../utils/jwt");
@@ -9,6 +10,9 @@ const AUTH_ERRORS = require("../constants/errors/auth.errors");
 const { User } = require("../models");
 
 const register = async (fullName, email, password) => {
+  validation.text(fullName, "fullName");
+  validation.credentials(email, password, true);
+  email = email.trim().toLowerCase();
   const existingUser = await User.findOne({
     where: {
       email: email,
@@ -31,6 +35,8 @@ const register = async (fullName, email, password) => {
 };
 
 const login = async (email, password) => {
+  validation.credentials(email, password);
+  email = email.trim().toLowerCase();
   const user = await User.findOne({
     where: {
       email: email,

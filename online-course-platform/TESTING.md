@@ -1,3 +1,5 @@
+> Historical manual testing transcript. Current behavior and setup are documented in README.md; automated regression tests supersede these examples. Missing passwords now return 400, and public course details omit lesson content. The sample JWTs below are expired.
+
 POST http://localhost:3000/api/auth/register
 
 input : {

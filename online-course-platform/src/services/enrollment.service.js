@@ -1,3 +1,4 @@
+const { sequelize } = require("../config/database");
 const { Enrollment, Course, User } = require("../models");
 
 const AppError = require("../utils/AppError");
@@ -16,50 +17,56 @@ const {
 } = require("../constants/errors/enrollment.errors");
 
 const enrollInCourse = async (courseId, currentUser) => {
-  if (currentUser.role !== ROLES.STUDENT) {
-    throw new AppError(ONLY_STUDENTS_CAN_ENROLL, 403);
-  }
+  return sequelize.transaction(async (transaction) => {
+    if (currentUser.role !== ROLES.STUDENT) {
+      throw new AppError(ONLY_STUDENTS_CAN_ENROLL, 403);
+    }
 
-  const course = await Course.findByPk(courseId);
+    const course = await Course.findByPk(courseId, { transaction, lock: transaction.LOCK.UPDATE });
 
-  if (!course) {
-    throw new AppError(COURSE_NOT_FOUND, 404);
-  }
-  if (course.instructorId === currentUser.id) {
-    throw new AppError(FORBIDDEN_COURSE_ACCESS, 403);
-  }
+    if (!course) {
+      throw new AppError(COURSE_NOT_FOUND, 404);
+    }
+    if (course.instructorId === currentUser.id) {
+      throw new AppError(FORBIDDEN_COURSE_ACCESS, 403);
+    }
 
-  if (!course.isPublished) {
-    throw new AppError(COURSE_NOT_PUBLISHED, 400);
-  }
+    if (!course.isPublished) {
+      throw new AppError(COURSE_NOT_PUBLISHED, 400);
+    }
 
-  const existingEnrollment = await Enrollment.findOne({
-    where: {
-      userId: currentUser.id,
-      courseId: courseId,
-    },
+    const existingEnrollment = await Enrollment.findOne({
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+      where: { userId: currentUser.id, courseId },
+    });
+
+    if (existingEnrollment?.status === "cancelled") {
+      await existingEnrollment.update(
+        { status: "active", progress: 0, enrolledAt: new Date() },
+        { transaction }
+      );
+      return existingEnrollment;
+    }
+    if (existingEnrollment) {
+      throw new AppError(ALREADY_ENROLLED, 409);
+    }
+
+    return Enrollment.create(
+      { userId: currentUser.id, courseId, status: "active", progress: 0 },
+      { transaction }
+    );
   });
-
-  if (existingEnrollment) {
-    throw new AppError(ALREADY_ENROLLED, 409);
-  }
-
-  const enrollment = await Enrollment.create({
-    userId: currentUser.id,
-    courseId: courseId,
-    status: "active",
-    progress: 0,
-  });
-
-  return enrollment;
 };
 
-const getMyEnrollments = async (currentUser) => {
+const getMyEnrollments = async (currentUser, pagination) => {
   if (currentUser.role !== ROLES.STUDENT) {
     throw new AppError(ONLY_STUDENTS_CAN_ENROLL, 403);
   }
 
   const enrollments = await Enrollment.findAll({
+    ...pagination,
+    order: [["id", "ASC"]],
     where: {
       userId: currentUser.id,
     },
@@ -85,62 +92,66 @@ const updateEnrollmentProgress = async (
   progress,
   currentUser
 ) => {
-  if (currentUser.role !== ROLES.STUDENT) {
-    throw new AppError(ONLY_STUDENTS_CAN_ENROLL, 403);
-  }
+  return sequelize.transaction(async (transaction) => {
+    if (currentUser.role !== ROLES.STUDENT) {
+      throw new AppError(ONLY_STUDENTS_CAN_ENROLL, 403);
+    }
 
-  if (typeof progress !== "number" || progress < 0 || progress > 100) {
-    throw new AppError(INVALID_PROGRESS, 400);
-  }
+    if (!Number.isInteger(progress) || progress < 0 || progress > 100) {
+      throw new AppError(INVALID_PROGRESS, 400);
+    }
 
-  const enrollment = await Enrollment.findByPk(enrollmentId);
+    const enrollment = await Enrollment.findByPk(enrollmentId, { transaction, lock: transaction.LOCK.UPDATE });
 
-  if (!enrollment) {
-    throw new AppError(ENROLLMENT_NOT_FOUND, 404);
-  }
+    if (!enrollment) {
+      throw new AppError(ENROLLMENT_NOT_FOUND, 404);
+    }
 
-  if (enrollment.userId !== currentUser.id) {
-    throw new AppError(FORBIDDEN_ENROLLMENT_ACCESS, 403);
-  }
+    if (enrollment.userId !== currentUser.id) {
+      throw new AppError(FORBIDDEN_ENROLLMENT_ACCESS, 403);
+    }
 
-  if (enrollment.status === "cancelled") {
-    throw new AppError(CANCELLED_ENROLLMENT_CANNOT_BE_UPDATED, 400);
-  }
+    if (enrollment.status === "cancelled") {
+      throw new AppError(CANCELLED_ENROLLMENT_CANNOT_BE_UPDATED, 400);
+    }
 
-  enrollment.progress = progress;
+    enrollment.progress = progress;
 
-  if (progress === 100) {
-    enrollment.status = "completed";
-  }
+    enrollment.status = progress === 100 ? "completed" : "active";
 
-  await enrollment.save();
+    await enrollment.save({ transaction });
 
-  return enrollment;
+    return enrollment;
+  });
 };
 
 const cancelEnrollment = async (enrollmentId, currentUser) => {
-  const enrollment = await Enrollment.findByPk(enrollmentId);
+  return sequelize.transaction(async (transaction) => {
+    const enrollment = await Enrollment.findByPk(enrollmentId, { transaction, lock: transaction.LOCK.UPDATE });
 
-  if (!enrollment) {
-    throw new AppError(ENROLLMENT_NOT_FOUND, 404);
-  }
+    if (!enrollment) {
+      throw new AppError(ENROLLMENT_NOT_FOUND, 404);
+    }
 
-  if (
-    currentUser.role !== ROLES.ADMIN &&
-    enrollment.userId !== currentUser.id
-  ) {
-    throw new AppError(FORBIDDEN_ENROLLMENT_ACCESS, 403);
-  }
+    if (
+      currentUser.role !== ROLES.ADMIN &&
+      enrollment.userId !== currentUser.id
+    ) {
+      throw new AppError(FORBIDDEN_ENROLLMENT_ACCESS, 403);
+    }
 
-  enrollment.status = "cancelled";
+    enrollment.status = "cancelled";
 
-  await enrollment.save();
+    await enrollment.save({ transaction });
 
-  return enrollment;
+    return enrollment;
+  });
 };
 
-const getAllEnrollments = async () => {
+const getAllEnrollments = async (pagination) => {
   const enrollments = await Enrollment.findAll({
+    ...pagination,
+    order: [["id", "ASC"]],
     include: [
       {
         model: User,

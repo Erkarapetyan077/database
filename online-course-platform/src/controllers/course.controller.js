@@ -1,8 +1,9 @@
+const { pagination } = require("../utils/validation");
 const courseService = require("../services/course.service");
 
 const getCourses = async (req, res) => {
   const { category, level } = req.query;
-  const courses = await courseService.getCourses({ category, level });
+  const courses = await courseService.getCourses({ category, level, ...pagination(req.query) });
 
   res.json({
     success: true,
@@ -33,7 +34,7 @@ const getCourseById = async (req, res) => {
 const getMyCourses = async (req, res) => {
   const id = req.user.id;
 
-  const courses = await courseService.getMyCourses(id);
+  const courses = await courseService.getMyCourses(id, pagination(req.query));
 
   res.json({
     success: true,
@@ -45,7 +46,11 @@ const getCourseStudents = async (req, res) => {
   const currentUser = req.user;
   const courseId = req.params.id;
 
-  const students = await courseService.getCourseStudents(courseId, currentUser);
+  const students = await courseService.getCourseStudents(
+    courseId,
+    currentUser,
+    pagination(req.query)
+  );
 
   res.json({
     success: true,
@@ -73,11 +78,11 @@ const updateCourse = async (req, res) => {
   const currentUser = req.user;
   const data = req.body;
 
-  const updatecourse = await courseService.updateCourse(id, data, currentUser);
+  const updatedCourse = await courseService.updateCourse(id, data, currentUser);
 
   res.json({
     success: true,
-    data: updatecourse,
+    data: updatedCourse,
   });
 };
 
@@ -86,11 +91,11 @@ const deleteCourse = async (req, res) => {
 
   const currentUser = req.user;
 
-  const deletedUser = await courseService.deleteCourse(id, currentUser);
+  const result = await courseService.deleteCourse(id, currentUser);
 
   res.json({
     success: true,
-    data: deletedUser,
+    data: result,
   });
 };
 
