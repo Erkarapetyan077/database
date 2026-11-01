@@ -1,0 +1,233 @@
+// Անուն՝ Erik Karapetyan
+// Առաջադրանք 1՝ նույնականացում
+// Ամսաթիվ՝ 2026-11-02
+// MongoDB 8.0.12; mongosh 2.14.1; պորտ՝ 27019։
+// Հանձնվող ֆայլում գաղտնաբառերը փոխարինված են <password>-ով։
+// Գործարկելիս օգտագործել միայն փորձնական գաղտնաբառեր։
+// Յուրաքանչյուր հատված գործարկել առանձին՝ նշված կապով։
+// 1-3 քայլերում authorization: disabled է,
+// հաջորդ քայլերում՝ enabled։
+
+use("clinic");
+
+// ՔԱՅԼ 1 — Փորձնական սերվերի կարգավորումներ
+// Կարգավորումների ֆայլ՝ mongod_lab.conf
+// Տվյալների պանակ՝ /home/erik/clinic-lab/data
+// Գրանցումների ֆայլ՝ /home/erik/clinic-lab/mongod.log
+// Պորտ՝ 27019; bindIp՝ 127.0.0.1։
+// Սկզբում իրավունքների ստուգումն անջատված է։
+// Terminal-ի հրաման՝ mongod --config mongod_lab.conf
+// lab-open կապ՝ mongodb://localhost:27019
+
+// ՔԱՅԼ 2 — Բազաների ցանկը՝ առանց մուտք գործելու
+db.adminCommand({ listDatabases: 1 });
+// Ստացված արդյունքը՝ կրճատված․
+// Բազաներ՝ admin, config, local։
+// totalSize: Long('94208'); totalSizeMb: Long('0'); ok: 1։
+// Բազաների ցանկը ստացվեց առանց օգտանուն և գաղտնաբառ տալու։
+
+// ՔԱՅԼ 3 — Ադմինիստրատորի ստեղծում admin բազայում
+const adminDb = db.getSiblingDB("admin");
+
+if (!adminDb.getUser("labAdmin")) {
+  adminDb.createUser({
+    user: "labAdmin",
+    pwd: "<password>",
+    roles: [
+      { role: "userAdminAnyDatabase", db: "admin" },
+      { role: "readWriteAnyDatabase", db: "admin" },
+    ],
+  });
+}
+// Արդյունք՝ { ok: 1 }
+
+// ՔԱՅԼ 4 — Իրավունքների ստուգման միացում և կրկնակի փորձ
+// Սերվերը կանգնեցրել եմ, կարգավորումներում դրել եմ՝
+// security.authorization: enabled,
+// հետո սերվերը կրկին գործարկել եմ։
+// Հրամանը կրկնել եմ առանց հաշիվ մուտք գործելու։
+db.adminCommand({ listDatabases: 1 });
+// MongoServerError[Unauthorized]: Command listDatabases requires authentication
+// Բազաների ցանկը ստանալու համար արդեն պահանջվում է մուտք գործել։
+
+// ՔԱՅԼ 5 — Մուտք labAdmin հաշվով
+// Terminal-ի հրաման՝
+// mongosh --port 27019 -u labAdmin --authenticationDatabase admin -p
+// lab-admin կապի հասցե՝
+// mongodb://labAdmin:<password>@localhost:27019/?authSource=admin
+//
+// Առաջին մուտքը չհաջողվեց։ Ստուգեցի՝ հաշիվը գոյություն ունի admin-ում։
+// Ժամանակավորապես անջատված իրավունքների ստուգմամբ փոխեցի գաղտնաբառը։
+// Հետո նորից միացրի պաշտպանությունը և հաջող մուտք գործեցի։
+db.adminCommand({ connectionStatus: 1 });
+/*
+{
+  authInfo: {
+    authenticatedUsers: [ { user: 'labAdmin', db: 'admin' } ],
+    authenticatedUserRoles: [
+      { role: 'readWriteAnyDatabase', db: 'admin' },
+      { role: 'userAdminAnyDatabase', db: 'admin' }
+    ]
+  },
+  ok: 1
+}
+*/
+
+// ՔԱՅԼ 6 — Տարբեր մեխանիզմներով հաշիվների ստեղծում
+// Գործարկել labAdmin հաշվով՝ clinic բազայում։
+// mongosh-ում բազան ընտրել եմ՝ use clinic հրամանով։
+// Անհրաժեշտ դեպքերում գաղտնաբառը մուտքագրել եմ passwordPrompt()-ով։
+// Հանձնվող պատճենում գաղտնաբառերը ներկայացված են <password>-ով։
+
+if (!db.getUser("mechSha256")) {
+  db.createUser({
+    user: "mechSha256",
+    pwd: "<password>",
+    roles: [{ role: "read", db: "clinic" }],
+    mechanisms: ["SCRAM-SHA-256"],
+  });
+}
+// Արդյունք՝ { ok: 1 }
+
+if (!db.getUser("mechSha1")) {
+  db.createUser({
+    user: "mechSha1",
+    pwd: "<password>",
+    roles: [{ role: "read", db: "clinic" }],
+    mechanisms: ["SCRAM-SHA-1"],
+  });
+}
+// Արդյունք՝ { ok: 1 }
+
+// Փորձի ընթացքում կատարված ուղղում․
+// mechSha256-ի գաղտնաբառը փոխելուց հետո ստուգումը ցույց տվեց՝
+// mechanisms: ['SCRAM-SHA-1', 'SCRAM-SHA-256']։
+// Այդ պատճառով SCRAM-SHA-1-ով մուտքն էլ հաջողվեց։
+// labAdmin հաշվով updateUser-ի միջոցով թողեցի միայն SCRAM-SHA-256-ը։
+// Ուղղումից հետո նոր կապերով կրկնեցի մուտքի փորձերը։
+// Ստորև ներկայացված են վերջնական արդյունքները։
+
+// ՓՈՐՁ A — mechSha1՝ առանց մեխանիզմը նշելու
+// Terminal-ի հրաման՝
+// mongosh "mongodb://localhost:27019/clinic?authSource=clinic" -u mechSha1 -p
+db.adminCommand({ connectionStatus: 1 });
+/*
+{
+  authInfo: {
+    authenticatedUsers: [ { user: 'mechSha1', db: 'clinic' } ],
+    authenticatedUserRoles: [ { role: 'read', db: 'clinic' } ]
+  },
+  ok: 1
+}
+*/
+// Մուտքը հաջողվեց։
+
+// ՓՈՐՁ B — mechSha1՝ SCRAM-SHA-1 մեխանիզմով
+// Terminal-ի հրաման՝
+// mongosh "mongodb://localhost:27019/clinic?authSource=clinic&authMechanism=SCRAM-SHA-1" -u mechSha1 -p
+db.adminCommand({ connectionStatus: 1 });
+/*
+{
+  authInfo: {
+    authenticatedUsers: [ { user: 'mechSha1', db: 'clinic' } ],
+    authenticatedUserRoles: [ { role: 'read', db: 'clinic' } ]
+  },
+  ok: 1
+}
+*/
+// Մուտքը հաջողվեց։
+
+// ՓՈՐՁ C — mechSha1՝ SCRAM-SHA-256 մեխանիզմով
+// Terminal-ի հրաման՝
+// mongosh "mongodb://localhost:27019/clinic?authSource=clinic&authMechanism=SCRAM-SHA-256" -u mechSha1 -p
+// Կապը չհաստատվեց, հետևաբար connectionStatus-ը չգործարկվեց։
+// Ստացված սխալը՝
+// MongoServerError: Unable to use SCRAM-SHA-256 based authentication for user without any SCRAM-SHA-256 credentials registered
+// Հաշվի համար SCRAM-SHA-256 նույնականացման տվյալներ գրանցված չեն։
+
+// ՓՈՐՁ D — mechSha256՝ առանց մեխանիզմը նշելու
+// Terminal-ի հրաման՝
+// mongosh "mongodb://localhost:27019/clinic?authSource=clinic" -u mechSha256 -p
+db.adminCommand({ connectionStatus: 1 });
+/*
+{
+  authInfo: {
+    authenticatedUsers: [ { user: 'mechSha256', db: 'clinic' } ],
+    authenticatedUserRoles: [ { role: 'read', db: 'clinic' } ]
+  },
+  ok: 1
+}
+*/
+// Մուտքը հաջողվեց։
+
+// ՓՈՐՁ E — mechSha256՝ SCRAM-SHA-1 մեխանիզմով
+// Փորձը կրկնել եմ հաշվի մեխանիզմներն ուղղելուց հետո։
+// Terminal-ի հրաման՝
+// mongosh "mongodb://localhost:27019/clinic?authSource=clinic&authMechanism=SCRAM-SHA-1" -u mechSha256 -p
+// Կապը չհաստատվեց, հետևաբար connectionStatus-ը չգործարկվեց։
+// Ստացված սխալը՝
+// MongoServerError: Unable to use SCRAM-SHA-1 based authentication for user without any SCRAM-SHA-1 credentials registered
+// Հաշվի համար SCRAM-SHA-1 նույնականացման տվյալներ գրանցված չեն։
+
+// ՓՈՐՁ F — mechSha256՝ SCRAM-SHA-256 մեխանիզմով
+// Terminal-ի հրաման՝
+// mongosh "mongodb://localhost:27019/clinic?authSource=clinic&authMechanism=SCRAM-SHA-256" -u mechSha256 -p
+db.adminCommand({ connectionStatus: 1 });
+/*
+{
+  authInfo: {
+    authenticatedUsers: [ { user: 'mechSha256', db: 'clinic' } ],
+    authenticatedUserRoles: [ { role: 'read', db: 'clinic' } ]
+  },
+  ok: 1
+}
+*/
+// Մուտքը հաջողվեց։
+
+// ՓՈՐՁ D-ի կրկնում — առանց մեխանիզմի, ուղղումից հետո
+// Terminal-ի հրաման՝
+// mongosh "mongodb://localhost:27019/clinic?authSource=clinic" -u mechSha256 -p
+db.adminCommand({ connectionStatus: 1 });
+/*
+{
+  authInfo: {
+    authenticatedUsers: [ { user: 'mechSha256', db: 'clinic' } ],
+    authenticatedUserRoles: [ { role: 'read', db: 'clinic' } ]
+  },
+  ok: 1
+}
+*/
+// Մուտքը հաջողվեց։
+
+// ՄԵԽԱՆԻԶՄՆԵՐԻ ՓՈՐՁԵՐԻ ՎԵՐՋՆԱԿԱՆ ԱՐԴՅՈՒՆՔՆԵՐ
+// mechSha1՝
+//   առանց authMechanism-ի՝ ok
+//   SCRAM-SHA-1՝ ok
+//   SCRAM-SHA-256՝ failed — Unable to use SCRAM-SHA-256...
+//
+// mechSha256՝
+//   առանց authMechanism-ի՝ ok
+//   SCRAM-SHA-1՝ failed — Unable to use SCRAM-SHA-1...
+//   SCRAM-SHA-256՝ ok
+
+// ՔԱՅԼ 7 — Սերվերի թույլատրված նույնականացման մեխանիզմները
+// labAdmin հաշվով mongosh-ում գործարկված հրամանը՝
+/*
+db.adminCommand({
+  getParameter: 1,
+  authenticationMechanisms: 1
+})
+*/
+// Ստացված սխալը՝ կրճատված, առանց կապի UUID-ի․
+// MongoServerError[Unauthorized]: not authorized on admin to execute command
+// { getParameter: 1, authenticationMechanisms: 1, ..., $db: "admin" }
+//
+// Ադմինիստրատորին տրված դերերը չեն թույլատրում getParameter հրամանը։
+// Այդ պատճառով authenticationMechanisms-ի արժեքը չստացվեց։
+
+// ՔԱՅԼ 8 — Մուտքի փորձ՝ սխալ authSource-ով
+// Terminal-ի հրաման՝
+// mongosh "mongodb://localhost:27019/clinic?authSource=admin" -u mechSha256 -p
+// Արդյունք՝ MongoServerError: Authentication failed.
+// mechSha256 հաշիվը ստեղծված է clinic բազայում,
+// իսկ այս փորձով այն ստուգվում էր admin բազայում։

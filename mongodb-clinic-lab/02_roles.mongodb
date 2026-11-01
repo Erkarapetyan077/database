@@ -1,0 +1,556 @@
+// Անուն՝ Erik Karapetyan
+// Առաջադրանք 2՝ հաշիվներ, դերեր և իրավունքներ
+// Ամսաթիվ՝ 2026-11-02
+//
+// Գաղտնաբառերը հանձնվող պատճենում փոխարինված են <password>-ով։
+// Հատվածները գործարկել առանձին՝ նշված հաշիվներով։
+// Ամբողջ ֆայլը մեկ հաշվով գործարկելը չի կրկնում տարբեր հաշիվների փորձերը։
+
+use("clinic");
+
+// ՔԱՅԼ 1 — Հավաքածուների ստեղծում labAdmin հաշվով
+// Եթե հավաքածուն արդեն կա, այն կրկին չենք ստեղծում։
+
+if (!db.getCollectionNames().includes("users")) {
+  db.createCollection("users");
+}
+
+if (!db.getCollectionNames().includes("appointments")) {
+  db.createCollection("appointments");
+}
+
+// Արդյունք՝ { ok: 1 }
+
+// Փորձնական փաստաթղթի ավելացում։
+// Email-ով ստուգումը կանխում է նույն փաստաթղթի կրկնակի ավելացումը։
+
+if (!db.users.findOne({ email: "matrix@example.com" })) {
+  db.users.insertOne({
+    name: "Matrix Test",
+    email: "matrix@example.com",
+    role: "admin",
+    active: true,
+  });
+}
+
+/*
+{
+  acknowledged: true,
+  insertedId: ObjectId('6ae7bad4de3ae95ba005fddc')
+}
+*/
+
+// Այս փաստաթղթի role դաշտը կլինիկայի մարդու դերն է։
+// Այն MongoDB սերվերի իրավունքներ չի տալիս։
+
+// ՔԱՅԼ 2 — frontdesk դերի ստեղծում
+// Թույլատրում ենք միայն կարդալ, ավելացնել և փոփոխել
+// clinic.users և clinic.appointments հավաքածուներում։
+
+if (!db.getRole("frontdesk")) {
+  db.createRole({
+    role: "frontdesk",
+    privileges: [
+      {
+        resource: { db: "clinic", collection: "users" },
+        actions: ["find", "insert", "update"],
+      },
+      {
+        resource: { db: "clinic", collection: "appointments" },
+        actions: ["find", "insert", "update"],
+      },
+    ],
+    roles: [],
+  });
+}
+
+// Արդյունք՝ { ok: 1 }
+// roles: [] — այլ դերերից իրավունքներ չի ժառանգում։
+
+// ՔԱՅԼ 3 — MongoDB հաշիվների ստեղծում
+
+// clinicApp — clinic բազայի readWrite դերով։
+
+if (!db.getUser("clinicApp")) {
+  db.createUser({
+    user: "clinicApp",
+    pwd: "<password>",
+    roles: [{ role: "readWrite", db: "clinic" }],
+  });
+}
+
+// Արդյունք՝ { ok: 1 }
+
+// auditor — clinic բազայի read դերով։
+
+if (!db.getUser("auditor")) {
+  db.createUser({
+    user: "auditor",
+    pwd: "<password>",
+    roles: [{ role: "read", db: "clinic" }],
+  });
+}
+
+// Արդյունք՝ { ok: 1 }
+
+// reception — մեր ստեղծած frontdesk դերով։
+
+if (!db.getUser("reception")) {
+  db.createUser({
+    user: "reception",
+    pwd: "<password>",
+    roles: [{ role: "frontdesk", db: "clinic" }],
+  });
+}
+
+// Արդյունք՝ { ok: 1 }
+
+// ԿԱՆԽԱՏԵՍՈՒՄՆԵՐ
+// Այստեղ ավելացնել մինչև փորձարկումները գրած սեփական կանխատեսումները։
+// Դրանք այս պատճենի համար դեռ չեն տրամադրվել։
+// Փորձերից հետո ստացված արդյունքները կանխատեսումներ չեն։
+
+// ՔԱՅԼ 4 — Վեց գործողությունների ստուգում clinicApp հաշվով
+// Միացման հրաման՝
+// mongosh "mongodb://localhost:27019/clinic?authSource=clinic" -u clinicApp -p
+
+// A — Կարդալ մեկ փաստաթուղթ։
+
+db.users.findOne();
+
+/*
+{
+  _id: ObjectId('6ae7bad4de3ae95ba005fddc'),
+  name: 'Matrix Test',
+  email: 'matrix@example.com',
+  role: 'admin',
+  active: true
+}
+*/
+// clinicApp — A՝ թույլատրված։
+
+// B — Ավելացնել փորձնական այցելություն։
+
+db.appointments.insertOne({
+  doctorId: new ObjectId(),
+  patientId: new ObjectId(),
+  start: new Date(),
+  durationMin: 15,
+  reason: "matrix test",
+  status: "scheduled",
+  fee: 0,
+});
+
+/*
+{
+  acknowledged: true,
+  insertedId: ObjectId('6ae7be25026e934c2bbf0642')
+}
+*/
+// clinicApp — B՝ թույլատրված։
+
+// C — Սահմանել Matrix Test-ի հեռախոսահամարը։
+
+db.users.updateOne(
+  { email: "matrix@example.com" },
+  { $set: { phone: "555-0999" } },
+);
+
+/*
+{
+  acknowledged: true,
+  insertedId: null,
+  matchedCount: 1,
+  modifiedCount: 1,
+  upsertedCount: 0
+}
+*/
+// clinicApp — C՝ թույլատրված։
+// Գտնվեց և փոփոխվեց մեկ փաստաթուղթ։
+
+// D — Ջնջել մեկ փորձնական այցելություն։
+
+db.appointments.deleteOne({ reason: "matrix test" });
+
+// Արդյունք՝ { acknowledged: true, deletedCount: 1 }
+// clinicApp — D՝ թույլատրված։
+
+// E — Ստեղծել ոչ եզակի ինդեքս email դաշտի վրա։
+
+db.users.createIndex({ email: 1 });
+
+// Արդյունք՝ email_1
+// clinicApp — E՝ թույլատրված։
+
+// F — Ստանալ հավաքածուների անունները։
+
+db.getCollectionNames();
+
+// Արդյունք՝ [ 'appointments', 'users' ]
+// clinicApp — F՝ թույլատրված։
+
+// ՔԱՅԼ 5 — Նույն գործողությունների ստուգում auditor հաշվով
+// Միացման հրաման՝
+// mongosh "mongodb://localhost:27019/clinic?authSource=clinic" -u auditor -p
+
+// A — Կարդալ մեկ փաստաթուղթ։
+
+db.users.findOne();
+
+/*
+{
+  _id: ObjectId('6ae7bad4de3ae95ba005fddc'),
+  name: 'Matrix Test',
+  email: 'matrix@example.com',
+  role: 'admin',
+  active: true,
+  phone: '555-0999'
+}
+*/
+// auditor — A՝ թույլատրված։
+
+// B — Փորձել ավելացնել այցելություն։
+
+db.appointments.insertOne({
+  doctorId: new ObjectId(),
+  patientId: new ObjectId(),
+  start: new Date(),
+  durationMin: 15,
+  reason: "matrix test",
+  status: "scheduled",
+  fee: 0,
+});
+
+// Ստացված սխալը՝ կրճատված․
+// MongoServerError[Unauthorized]: not authorized on clinic to execute
+// command { insert: "appointments", ... }
+// auditor — B՝ մերժված։ Պակասում է insert իրավունքը։
+
+// C — Փորձել սահմանել հեռախոսահամարը։
+
+db.users.updateOne(
+  { email: "matrix@example.com" },
+  { $set: { phone: "555-0999" } },
+);
+
+// Ստացված սխալը՝ կրճատված․
+// MongoServerError[Unauthorized]: not authorized on clinic to execute
+// command { update: "users", ... }
+// auditor — C՝ մերժված։ Պակասում է update իրավունքը։
+
+// D — Փորձել ջնջել այցելությունը։
+
+db.appointments.deleteOne({ reason: "matrix test" });
+
+// Ստացված սխալը՝ կրճատված․
+// MongoServerError[Unauthorized]: not authorized on clinic to execute
+// command { delete: "appointments", ... }
+// auditor — D՝ մերժված։ Պակասում է remove իրավունքը։
+
+// E — Փորձել ստեղծել ինդեքս։
+
+db.users.createIndex({ email: 1 });
+
+// Ստացված սխալը՝ կրճատված․
+// MongoServerError[Unauthorized]: not authorized on clinic to execute
+// command { createIndexes: "users", ... }
+// auditor — E՝ մերժված։ Պակասում է createIndex իրավունքը։
+
+// F — Ստանալ հավաքածուների անունները։
+
+db.getCollectionNames();
+
+// Արդյունք՝ [ 'appointments', 'users' ]
+// auditor — F՝ թույլատրված։
+
+// ՔԱՅԼ 6 — Նույն գործողությունների ստուգում reception հաշվով
+// Միացման հրաման՝
+// mongosh "mongodb://localhost:27019/clinic?authSource=clinic" -u reception -p
+
+// A — Կարդալ մեկ փաստաթուղթ։
+
+db.users.findOne();
+
+/*
+{
+  _id: ObjectId('6ae7bad4de3ae95ba005fddc'),
+  name: 'Matrix Test',
+  email: 'matrix@example.com',
+  role: 'admin',
+  active: true,
+  phone: '555-0999'
+}
+*/
+// reception — A՝ թույլատրված։
+
+// B — Ավելացնել փորձնական այցելություն։
+
+db.appointments.insertOne({
+  doctorId: new ObjectId(),
+  patientId: new ObjectId(),
+  start: new Date(),
+  durationMin: 15,
+  reason: "matrix test",
+  status: "scheduled",
+  fee: 0,
+});
+
+/*
+{
+  acknowledged: true,
+  insertedId: ObjectId('6ae7c10b4dbb41af42a274ec')
+}
+*/
+// reception — B՝ թույլատրված։
+
+// C — Սահմանել հեռախոսահամարը։
+
+db.users.updateOne(
+  { email: "matrix@example.com" },
+  { $set: { phone: "555-0999" } },
+);
+
+/*
+{
+  acknowledged: true,
+  insertedId: null,
+  matchedCount: 1,
+  modifiedCount: 0,
+  upsertedCount: 0
+}
+*/
+// reception — C՝ թույլատրված։
+// Փաստաթուղթը գտնվեց, բայց համարը նույնն էր, ուստի փոփոխություն չեղավ։
+
+// D — Փորձել ջնջել այցելությունը։
+
+db.appointments.deleteOne({ reason: "matrix test" });
+
+// Ստացված սխալը՝ կրճատված․
+// MongoServerError[Unauthorized]: not authorized on clinic to execute
+// command { delete: "appointments", ... }
+// reception — D՝ մերժված։ Պակասում է remove իրավունքը։
+
+// E — Փորձել ստեղծել ինդեքս։
+
+db.users.createIndex({ email: 1 });
+
+// Ստացված սխալը՝ կրճատված․
+// MongoServerError[Unauthorized]: not authorized on clinic to execute
+// command { createIndexes: "users", ... }
+// reception — E՝ մերժված։ Պակասում է createIndex իրավունքը։
+
+// F — Փորձել ստանալ հավաքածուների անունները։
+
+db.getCollectionNames();
+
+// Ստացված սխալը՝ կրճատված․
+// MongoServerError[Unauthorized]: not authorized on clinic to execute command
+// { listCollections: 1, filter: {}, cursor: {},
+//   nameOnly: true, authorizedCollections: false, ... }
+// reception — F՝ մերժված։ Պակասում է listCollections իրավունքը։
+
+// ՔԱՅԼ 7 — Նույն գործողությունների ստուգում labAdmin հաշվով
+// Ադմինի կապում ընտրել clinic բազան՝ use clinic։
+
+// A — Կարդալ մեկ փաստաթուղթ։
+
+db.users.findOne();
+
+/*
+{
+  _id: ObjectId('6ae7bad4de3ae95ba005fddc'),
+  name: 'Matrix Test',
+  email: 'matrix@example.com',
+  role: 'admin',
+  active: true,
+  phone: '555-0999'
+}
+*/
+// labAdmin — A՝ թույլատրված։
+
+// B — Ավելացնել փորձնական այցելություն։
+
+db.appointments.insertOne({
+  doctorId: new ObjectId(),
+  patientId: new ObjectId(),
+  start: new Date(),
+  durationMin: 15,
+  reason: "matrix test",
+  status: "scheduled",
+  fee: 0,
+});
+
+/*
+{
+  acknowledged: true,
+  insertedId: ObjectId('6ae7c39fde3ae95ba005fddf')
+}
+*/
+// labAdmin — B՝ թույլատրված։
+
+// C — Սահմանել հեռախոսահամարը։
+
+db.users.updateOne(
+  { email: "matrix@example.com" },
+  { $set: { phone: "555-0999" } },
+);
+
+/*
+{
+  acknowledged: true,
+  insertedId: null,
+  matchedCount: 1,
+  modifiedCount: 0,
+  upsertedCount: 0
+}
+*/
+// labAdmin — C՝ թույլատրված։
+// Փոփոխություն չեղավ, քանի որ համարը նույնն էր։
+
+// D — Ջնջել մեկ փորձնական այցելություն։
+
+db.appointments.deleteOne({ reason: "matrix test" });
+
+// Արդյունք՝ { acknowledged: true, deletedCount: 1 }
+// labAdmin — D՝ թույլատրված։
+
+// E — Ստեղծել ինդեքս։
+
+db.users.createIndex({ email: 1 });
+
+// Արդյունք՝ email_1
+// labAdmin — E՝ թույլատրված։ Նույն ինդեքսն արդեն գոյություն ուներ։
+
+// F — Ստանալ հավաքածուների անունները։
+
+db.getCollectionNames();
+
+// Արդյունք՝ [ 'appointments', 'users' ]
+// labAdmin — F՝ թույլատրված։
+
+// ԻՐԱԿԱՆ ԱՐԴՅՈՒՆՔՆԵՐԻ ԱՂՅՈՒՍԱԿ
+// +՝ թույլատրված, -՝ մերժված։
+//
+// Գործողություն | clinicApp | auditor | reception | labAdmin
+// A            | +         | +       | +         | +
+// B            | +         | -       | +         | +
+// C            | +         | -       | +         | +
+// D            | +         | -       | -         | +
+// E            | +         | -       | -         | +
+// F            | +         | +       | -         | +
+//
+// clinicApp-ի այս արդյունքները վերաբերում են սկզբնական readWrite դերին։
+
+// ՔԱՅԼ 8 — Փորձնական այցելությունների մաքրում labAdmin հաշվով
+
+db.appointments.deleteMany({ reason: "matrix test" });
+
+// Արդյունք՝ { acknowledged: true, deletedCount: 1 }
+
+// ՔԱՅԼ 9 — clinicApp-ից readWrite դերի հեռացում
+// Գործարկել labAdmin հաշվով՝ clinic բազայում։
+
+db.revokeRolesFromUser("clinicApp", [{ role: "readWrite", db: "clinic" }]);
+
+// Արդյունք՝ { ok: 1 }
+
+// Ստուգել հաշվի մնացած դերերը։
+
+db.getUser("clinicApp");
+
+/*
+{
+  _id: 'clinic.clinicApp',
+  userId: UUID('db7cbf08-7b68-4a37-a209-5690d339b4f4'),
+  user: 'clinicApp',
+  db: 'clinic',
+  roles: [],
+  mechanisms: [ 'SCRAM-SHA-1', 'SCRAM-SHA-256' ]
+}
+*/
+// roles: [] — հաշիվը հիմա դեր չունի։
+
+// Նորից միանալ clinicApp հաշվով՝
+// mongosh "mongodb://localhost:27019/clinic?authSource=clinic" -u clinicApp -p
+
+// B փորձի կրկնում՝ առանց դերի։
+
+db.appointments.insertOne({
+  doctorId: new ObjectId(),
+  patientId: new ObjectId(),
+  start: new Date(),
+  durationMin: 15,
+  reason: "matrix test",
+  status: "scheduled",
+  fee: 0,
+});
+
+// Ստացված սխալը՝ կրճատված․
+// MongoServerError[Unauthorized]: not authorized on clinic to execute
+// command { insert: "appointments", ... }
+// Առանց դերի clinicApp-ը չի կարող այցելություն ավելացնել։
+
+// ՔԱՅԼ 10 — clinicApp-ին միայն read դերի տրամադրում
+// Գործարկել labAdmin հաշվով։
+
+db.grantRolesToUser("clinicApp", [{ role: "read", db: "clinic" }]);
+
+// Արդյունք՝ { ok: 1 }
+
+// Նորից միանալ clinicApp հաշվով և կրկնել A ու B փորձերը։
+// mongosh "mongodb://localhost:27019/clinic?authSource=clinic" -u clinicApp -p
+
+// A — Փաստաթղթի ընթերցում՝ read դերով։
+
+db.users.findOne();
+
+/*
+{
+  _id: ObjectId('6ae7bad4de3ae95ba005fddc'),
+  name: 'Matrix Test',
+  email: 'matrix@example.com',
+  role: 'admin',
+  active: true,
+  phone: '555-0999'
+}
+*/
+// clinicApp՝ read դերով — A՝ թույլատրված։
+
+// B — Այցելության ավելացման փորձ՝ read դերով։
+
+db.appointments.insertOne({
+  doctorId: new ObjectId(),
+  patientId: new ObjectId(),
+  start: new Date(),
+  durationMin: 15,
+  reason: "matrix test",
+  status: "scheduled",
+  fee: 0,
+});
+
+// Սպասվող արդյունք՝ մերժված, քանի որ read դերը insert իրավունք չի տալիս։
+// Այս վերջին փորձի իրական սխալը դեռ պետք է գործարկել և գրանցել այստեղ։
+
+// ԳՐԱՎՈՐ ՊԱՏԱՍԽԱՆՆԵՐ
+// Ստորև պատասխանների նախագիծն է․ կարդալ և ձևակերպել սեփական բառերով։
+
+// 1. Մերժված գործողությունների համար պակասող իրավունքները
+// auditor-ի B, C, D և E փորձերում համապատասխանաբար պակասում են
+// insert, update, remove և createIndex իրավունքները։
+// reception-ի D, E և F փորձերում պակասում են remove, createIndex
+// և listCollections իրավունքները․ find-ը չի տալիս հավաքածուների ցանկը
+// այս հրամանով ստանալու իրավունքը։
+// Սեփական սխալ կանխատեսումների համեմատությունը լրացնել սկզբնական
+// կանխատեսումները ներկայացնելուց հետո։
+
+// 2. Ինչպե՞ս թաքցնել հիվանդների ալերգիաները frontdesk-ից
+// Ալերգիաները կարելի է պահել առանձին՝ patientMedicalDetails հավաքածուում։
+// frontdesk-ին այդ հավաքածուի համար կարդալու իրավունք չենք տա,
+// իսկ users-ում կպահենք ընդունարանի համար անհրաժեշտ տվյալները։
+
+// 3. «Դեր» բառի երկու իմաստները
+// reception հաշվի frontdesk դերը MongoDB սերվերի թույլատրված
+// գործողությունների հավաքածու է։
+// Dr. Elena Rossi-ի փաստաթղթի role: "doctor" դաշտը նկարագրում է
+// նրա աշխատանքը կլինիկայում և ինքնուրույն MongoDB իրավունքներ չի տալիս։
