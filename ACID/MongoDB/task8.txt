@@ -1,0 +1,79 @@
+mongosh --port 27020 -u adminUser -p --authenticationDatabase admin
+
+use bookstore
+
+db.createUser({
+  user: "appUser",
+  pwd: passwordPrompt(),
+  roles: [
+    { role: "readWrite", db: "bookstore" }
+  ]
+})
+Enter password
+******{ ok: 1 }
+
+test> use bookstore
+switched to db bookstore
+bookstore> db.books.insertOne({
+|   title: "MongoDB Basics",
+|   price: 20
+| })
+{
+  acknowledged: true,
+  insertedId: ObjectId('6ae7893405b8117067314a04')
+}
+
+db.books.find()
+[
+  {
+    _id: ObjectId('6ae7893405b8117067314a04'),
+    title: 'MongoDB Basics',
+    price: 20
+  }
+]
+
+
+db.getSiblingDB("other").test.insertOne({ a: 1 })
+MongoServerError[Unauthorized]: not authorized on other to execute
+ command { insert: "test",
+  documents: [ { a: 1, _id: ObjectId('6ae7897305b8117067314a05') } ], ordered: true, lsid: { id: UUID("d8545e7b-e7aa-4f9c-8e91-f1783a4114be") }, $db: "other" }
+
+  test> use admin
+switched to db admin
+admin> show users
+[
+  {
+    _id: 'admin.adminUser',
+    userId: UUID('f5db7a40-4aa5-44fe-bf8e-a2431cf8a653'),
+    user: 'adminUser',
+    db: 'admin',
+    roles: [
+      { role: 'readWriteAnyDatabase', db: 'admin' },
+      { role: 'userAdminAnyDatabase', db: 'admin' }
+    ],
+    mechanisms: [ 'SCRAM-SHA-1', 'SCRAM-SHA-256' ]
+  }
+]
+
+bookestore> use bookstore
+switched to db bookstore
+bookstore> show users
+[
+  {
+    _id: 'bookstore.appUser',
+    userId: UUID('65b3af8e-6944-4320-af50-178420a0e47f'),
+    user: 'appUser',
+    db: 'bookstore',
+    roles: [ { role: 'readWrite', db: 'bookstore' } ],
+    mechanisms: [ 'SCRAM-SHA-1', 'SCRAM-SHA-256' ]
+  }
+]
+
+appUser-ի համար նշում ենք --authenticationDatabase bookstore,
+քանի որ օգտատիրոջը ստեղծել ենք bookstore բազայում։
+
+admin-ում show users-ը ցույց տվեց adminUser-ին,
+իսկ bookstore-ում՝ appUser-ին։
+Սա ցույց է տալիս, որ օգտատիրոջ ինքնությունը կապված է
+այն բազայի հետ, որտեղ նրան ստեղծել ենք։
+Նրա թույլատրված գործողությունները որոշվում են տրված դերերով։

@@ -1,0 +1,54 @@
+\\ TASK 6 — MongoDB Installation & Verification //
+
+mongod --version
+db version v8.0.12
+Build Info: {
+    "version": "8.0.12",
+    "gitVersion": "b60fc6875b5fb4b63cc0dbbd8dda0d6d6277921a",
+    "openSSLVersion": "OpenSSL 3.4.1 11 Feb 2025",
+    "modules": [],
+    "allocator": "tcmalloc-google",
+    "environment": {
+        "distmod": "ubuntu2404",
+        "distarch": "x86_64",
+        "target_arch": "x86_64"
+    }
+}
+
+
+mongosh --version
+2.14.1
+
+mongosh --port 27020
+Current Mongosh Log ID: 6ae783b16639a8d579a17e9f
+Connecting to:          mongodb://127.0.0.1:27019/?directConnection=true&serverSelectionTimeoutMS=2000&appName=mongosh+2.14.1
+Using MongoDB:          8.0.12
+Using Mongosh:          2.14.1
+
+For mongosh info see: https://www.mongodb.com/docs/mongodb-shell/
+
+------
+   The server generated these startup warnings when booting
+   2026-11-01T21:02:29.848+04:00: Using the XFS filesystem is strongly recommended with the WiredTiger storage engine. See http://dochub.mongodb.org/core/prodnotes-filesystem
+   2026-11-01T21:02:30.475+04:00: For customers running the current memory allocator, we suggest changing the contents of the following sysfsFile
+   2026-11-01T21:02:30.475+04:00: For customers running the current memory allocator, we suggest changing the contents of the following sysfsFile
+   2026-11-01T21:02:30.475+04:00: We suggest setting the contents of sysfsFile to 0.
+   2026-11-01T21:02:30.475+04:00: Your system has glibc support for rseq built in, which is not yet supported by tcmalloc-google and has critical performance implications. Please set the environment variable GLIBC_TUNABLES=glibc.pthread.rseq=0
+   2026-11-01T21:02:30.475+04:00: vm.max_map_count is too low
+   2026-11-01T21:02:30.475+04:00: We suggest setting swappiness to 0 or 1, as swapping can cause performance problems.
+------
+
+test> db.runCommand({ ping: 1 })
+{ ok: 1 }
+test> show dbs
+admin   40.00 KiB
+config  48.00 KiB
+local   72.00 KiB
+
+// admin — օգտատերերի, դերերի և սերվերի կառավարման համար նախատեսված բազա է։
+
+// config — պահում է MongoDB-ի ներքին մետատվյալները,
+// հատկապես բաշխված՝ sharded կլաստերի աշխատանքի համար։
+
+// local — պահում է տվյալ սերվերին հատուկ ներքին տվյալները,
+// որոնք չեն կրկնօրինակվում մյուս սերվերներին։

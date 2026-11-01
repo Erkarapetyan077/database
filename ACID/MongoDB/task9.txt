@@ -1,0 +1,109 @@
+use bookstore
+
+db.books.insertMany([
+  { title: "JavaScript Basics", price: 18 },
+  { title: "Node.js Guide", price: 25, tags: ["backend", "node"] },
+  { title: "Database Design", price: 30, publishedYear: 2024 },
+  { title: "React Handbook", price: 15 },
+  { title: "Learning SQL" }
+])
+{
+  acknowledged: true,
+  insertedIds: {
+    '0': ObjectId('6ae78aba11551f80ba9426fd'),
+    '1': ObjectId('6ae78aba11551f80ba9426fe'),
+    '2': ObjectId('6ae78aba11551f80ba9426ff'),
+    '3': ObjectId('6ae78aba11551f80ba942700'),
+    '4': ObjectId('6ae78aba11551f80ba942701')
+  }
+}
+
+db.books.find({ price: { $gt: 15 } })
+[
+  {
+    _id: ObjectId('6ae7893405b8117067314a04'),
+    title: 'MongoDB Basics',
+    price: 20
+  },
+  {
+    _id: ObjectId('6ae78aba11551f80ba9426fd'),
+    title: 'JavaScript Basics',
+    price: 18
+  },
+  {
+    _id: ObjectId('6ae78aba11551f80ba9426fe'),
+    title: 'Node.js Guide',
+    price: 25,
+    tags: [ 'backend', 'node' ]
+  },
+  {
+    _id: ObjectId('6ae78aba11551f80ba9426ff'),
+    title: 'Database Design',
+    price: 30,
+    publishedYear: 2024
+  }
+]
+
+db.books.find().sort({ price: -1 }).limit(3)
+[
+  {
+    _id: ObjectId('6ae78aba11551f80ba9426ff'),
+    title: 'Database Design',
+    price: 30,
+    publishedYear: 2024
+  },
+  {
+    _id: ObjectId('6ae78aba11551f80ba9426fe'),
+    title: 'Node.js Guide',
+    price: 25,
+    tags: [ 'backend', 'node' ]
+  },
+  {
+    _id: ObjectId('6ae7893405b8117067314a04'),
+    title: 'MongoDB Basics',
+    price: 20
+  }
+]
+bookstore> db.books.find({ title: "Node.js Guide" })
+[
+  {
+    _id: ObjectId('6ae78aba11551f80ba9426fe'),
+    title: 'Node.js Guide',
+    price: 25,
+    tags: [ 'backend', 'node' ]
+  }
+]
+bookstore> db.books.updateOne(
+|   { title: "Node.js Guide" },
+|   { $set: { price: 28 } }
+| )
+{
+  acknowledged: true,
+  insertedId: null,
+  matchedCount: 1,
+  modifiedCount: 1,
+  upsertedCount: 0
+}
+bookstore> db.books.find({ title: "Node.js Guide" })
+[
+  {
+    _id: ObjectId('6ae78aba11551f80ba9426fe'),
+    title: 'Node.js Guide',
+    price: 28,
+    tags: [ 'backend', 'node' ]
+  }
+]
+bookstore> db.books.deleteOne({ title: "React Handbook" })
+{ acknowledged: true, deletedCount: 1 }
+
+db.books.countDocuments()
+5
+show collections
+books
+
+books հավաքածուն ստեղծվեց առաջին փաստաթուղթը ավելացնելիս՝
+առանց createCollection հրամանի։ Լռելյայն MongoDB-ն չի պարտադրում,
+որ բոլոր փաստաթղթերն ունենան նույն դաշտերն ու կառուցվածքը,
+դրա համար կարողացանք պահել նաև առանց price-ի
+գիրք։ Եթե սահմանենք schema validation,
+MongoDB-ն գրելու պահին կստուգի սահմանված կանոնները։

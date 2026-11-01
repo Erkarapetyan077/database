@@ -1,0 +1,55 @@
+\\ Task 7 - Enable authentication //
+
+test> use admin
+switched to db admin
+admin> db.createUser({
+|   user: "adminUser",
+|   pwd: passwordPrompt(),
+|   roles: [
+|     { role: "userAdminAnyDatabase", db: "admin" },
+|     { role: "readWriteAnyDatabase", db: "admin" }
+|   ]
+| })
+Enter password
+******{ ok: 1 }
+
+test> db.adminCommand({ getCmdLineOpts: 1 })
+{
+  argv: [
+    'mongod',
+    '--config',
+    '/home/erik/acid-mongodb/mongod.conf',
+    '--fork'
+  ],
+  parsed: {
+    config: '/home/erik/acid-mongodb/mongod.conf',
+    net: { bindIp: '127.0.0.1', port: 27020 },
+    processManagement: { fork: true },
+    security: { authorization: 'disabled' },
+    storage: { dbPath: '/home/erik/acid-mongodb/data' },
+    systemLog: {
+      destination: 'file',
+      logAppend: true,
+      path: '/home/erik/acid-mongodb/mongod.log'
+    }
+  },
+  ok: 1
+}
+
+db.getSiblingDB("admin").shutdownServer()
+
+// MongoNetworkError: connection 2 to 127.0.0.1:27020 closed
+
+mongosh --port 27020
+
+test> show dbs
+
+// MongoServerError[Unauthorized]: Command listDatabases requires authentication
+
+
+Առաջին ադմինին ստեղծեցինք authorization-ը միացնելուց առաջ, որպեսզի հետո ունենանք մուտք գործելու
+ և օգտատերերին կառավարելու հնարավորություն։ Հակառակ դեպքում սովորական հրամանները կարգելվեն,
+իսկ մուտք գործելու օգտատեր դեռ չենք ունենա։ MongoDB-ի localhost exception-ը թույլ է
+ տալիս նույն համակարգչից ստեղծել առաջին օգտատիրոջը նույնիսկ authorization-ը միացնելուց հետո,
+ եթե սերվերում դեռ ոչ մի օգտատեր կամ դեր չկա։ Առաջին օգտատիրոջ կամ դերի ստեղծումից հետո այդ
+ բացառությունն այլևս չի գործում։
