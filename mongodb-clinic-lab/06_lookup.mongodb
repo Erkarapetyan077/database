@@ -1,0 +1,272 @@
+// Անուն՝ Erik Karapetyan
+// Առաջադրանք 5՝ հավաքածուների կապերը $lookup-ով
+// Ամսաթիվ՝ 2026-11-04
+// Գործարկել lab-admin կապով։ Նախ նորից գործարկել 04_seed.mongodb՝ CRUD-ի փոփոխությունները վերացնելու համար։
+
+use("clinic");
+
+// L1 — Յուրաքանչյուր այցելությանը միացնում ենք բժշկին և հիվանդին՝ առանձին անուններով։
+db.appointments
+  .aggregate([
+    {
+      $lookup: {
+        from: "users",
+        localField: "doctorId",
+        foreignField: "_id",
+        as: "doctorUser",
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "patientId",
+        foreignField: "_id",
+        as: "patientUser",
+      },
+    },
+    { $unwind: "$doctorUser" },
+    { $unwind: "$patientUser" },
+    { $sort: { start: 1 } },
+    {
+      $project: {
+        _id: 0,
+        start: 1,
+        doctor: "$doctorUser.name",
+        patient: "$patientUser.name",
+        reason: 1,
+        status: 1,
+      },
+    },
+  ])
+  .toArray();
+// Արդյունք՝ 9 փաստաթուղթ՝ ըստ start-ի աճման։ Առաջինը՝
+// { start: ISODate('2025-02-03T09:00:00Z'), doctor: 'Dr. Elena Rossi',
+// patient: 'Ana Costa', reason: 'Chest pain follow-up', status: 'completed' }
+
+// L2 — Սկսում ենք բժիշկներից, որ այցելություն չունեցողն էլ մնա արդյունքի մեջ։
+db.users
+  .aggregate([
+    { $match: { role: "doctor" } },
+    {
+      $lookup: {
+        from: "appointments",
+        localField: "_id",
+        foreignField: "doctorId",
+        as: "visits",
+      },
+    },
+    {
+      $project: { _id: 0, doctor: "$name", appointments: { $size: "$visits" } },
+    },
+    { $sort: { appointments: -1, doctor: 1 } },
+  ])
+  .toArray();
+// Արդյունք՝ [ { doctor: 'Dr. Elena Rossi', appointments: 6 },
+// { doctor: 'Dr. Hamid Karimi', appointments: 3 },
+// { doctor: 'Dr. Sofia Lindqvist', appointments: 0 } ]
+
+// L3 — Հիվանդների այցելությունների քանակը՝ ներառյալ զրոները։
+db.users
+  .aggregate([
+    { $match: { role: "patient" } },
+    {
+      $lookup: {
+        from: "appointments",
+        localField: "_id",
+        foreignField: "patientId",
+        as: "visits",
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        patient: "$name",
+        appointments: { $size: "$visits" },
+      },
+    },
+    { $sort: { appointments: -1, patient: 1 } },
+  ])
+  .toArray();
+// Արդյունք՝ [ { patient: 'Ana Costa', appointments: 3 },
+// { patient: 'Ben Okoye', appointments: 2 }, { patient: 'Clara Meyer', appointments: 2 },
+// { patient: 'Dmitri Volkov', appointments: 2 }, { patient: 'Eva Nilsson', appointments: 0 } ]
+
+// L4 — Եկամուտը հաշվում ենք միայն ավարտված այցելություններից։
+db.appointments
+  .aggregate([
+    { $match: { status: "completed" } },
+    {
+      $group: {
+        _id: "$doctorId",
+        appointments: { $sum: 1 },
+        revenue: { $sum: "$fee" },
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "_id",
+        foreignField: "_id",
+        as: "doctorUser",
+      },
+    },
+    { $unwind: "$doctorUser" },
+    {
+      $project: {
+        _id: 0,
+        doctor: "$doctorUser.name",
+        appointments: 1,
+        revenue: 1,
+      },
+    },
+    { $sort: { revenue: -1, doctor: 1 } },
+  ])
+  .toArray();
+// Արդյունք՝ [ { doctor: 'Dr. Elena Rossi', appointments: 3, revenue: 360 },
+// { doctor: 'Dr. Hamid Karimi', appointments: 2, revenue: 140 } ]
+
+// L5 — Ոչ մի այցելություն չունեցող հիվանդները։
+db.users
+  .aggregate([
+    { $match: { role: "patient" } },
+    {
+      $lookup: {
+        from: "appointments",
+        localField: "_id",
+        foreignField: "patientId",
+        as: "visits",
+      },
+    },
+    { $match: { visits: { $size: 0 } } },
+    { $project: { _id: 0, name: 1, email: 1 } },
+  ])
+  .toArray();
+// Արդյունք՝ [ { name: 'Eva Nilsson', email: 'eva.nilsson@example.com' } ]
+
+// L6 — Մասնագիտությամբ խմբավորում՝ առանց չեղարկված այցելությունների։
+db.appointments
+  .aggregate([
+    { $match: { status: { $ne: "cancelled" } } },
+    {
+      $lookup: {
+        from: "users",
+        localField: "doctorId",
+        foreignField: "_id",
+        as: "doctorUser",
+      },
+    },
+    { $unwind: "$doctorUser" },
+    {
+      $group: {
+        _id: "$doctorUser.doctor.specialty",
+        appointments: { $sum: 1 },
+        avgFee: { $avg: "$fee" },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        specialty: "$_id",
+        appointments: 1,
+        avgFee: { $round: ["$avgFee", 2] },
+      },
+    },
+    { $sort: { avgFee: -1, specialty: 1 } },
+  ])
+  .toArray();
+// Արդյունք՝ [ { specialty: 'cardiology', appointments: 5, avgFee: 110 },
+// { specialty: 'pediatrics', appointments: 3, avgFee: 70 } ]
+
+// L7 — Լրացուցիչ փորձ․ սխեման ընդունում է ObjectId-ն՝ առանց դրա հղումը ստուգելու։
+const bonusPatient = db.users.findOne({
+  email: "ben.okoye@example.com",
+  role: "patient",
+});
+if (!bonusPatient)
+  throw new Error("Ben Okoye-ն չի գտնվել․ նախ գործարկել 04_seed.mongodb");
+const bonusAppointments = db.appointments.insertMany([
+  {
+    doctorId: new ObjectId(),
+    patientId: bonusPatient._id,
+    start: new Date("2025-05-01T09:00:00Z"),
+    durationMin: 15,
+    reason: "L7 missing doctor",
+    status: "scheduled",
+    fee: 0,
+  },
+  {
+    doctorId: bonusPatient._id,
+    patientId: bonusPatient._id,
+    start: new Date("2025-05-01T10:00:00Z"),
+    durationMin: 15,
+    reason: "L7 patient as doctor",
+    status: "scheduled",
+    fee: 0,
+  },
+]);
+// Արդյունք՝ acknowledged: true, insertedIds-ում՝ 2 նոր ObjectId։
+
+// Պահում ենք հենց այս փորձի ID-ները, որ վերջում ջնջենք միայն այս երկու գրառումը։
+try {
+  // L7(a) — doctorId-ով ոչ մի օգտատեր չի գտնվել․ lookup-ի զանգվածը դատարկ է։
+  console.log(
+    db.appointments
+      .aggregate([
+        {
+          $lookup: {
+            from: "users",
+            localField: "doctorId",
+            foreignField: "_id",
+            as: "doctorUser",
+          },
+        },
+        { $match: { doctorUser: { $size: 0 } } },
+        { $project: { _id: 0, reason: 1 } },
+      ])
+      .toArray(),
+  );
+  // Արդյունք՝ [ { reason: 'L7 missing doctor' } ]
+
+  // L7(b) — Հղումը կա, բայց գտնված օգտատիրոջ դերը doctor չէ։
+  console.log(
+    db.appointments
+      .aggregate([
+        {
+          $lookup: {
+            from: "users",
+            localField: "doctorId",
+            foreignField: "_id",
+            as: "doctorUser",
+          },
+        },
+        { $unwind: "$doctorUser" },
+        { $match: { "doctorUser.role": { $ne: "doctor" } } },
+        { $project: { _id: 0, reason: 1, linkedRole: "$doctorUser.role" } },
+      ])
+      .toArray(),
+  );
+  // Արդյունք՝ [ { reason: 'L7 patient as doctor', linkedRole: 'patient' } ]
+} finally {
+  console.log(
+    db.appointments.deleteMany({
+      _id: { $in: Object.values(bonusAppointments.insertedIds) },
+    }),
+  );
+  // Արդյունք՝ { acknowledged: true, deletedCount: 2 }
+}
+
+db.appointments.countDocuments({});
+// Արդյունք՝ 9․ լրացուցիչ փորձից տվյալ չի մնացել։
+
+// 1. Բժիշկներից և հիվանդներից սկսելով՝ պահում ենք նաև դատարկ visits զանգվածով մարդկանց։
+// Եթե սկսեինք appointments-ից, Dr. Sofia Lindqvist-ը և Eva Nilsson-ը չէին հայտնվի,
+// քանի որ նրանց հղվող ոչ մի այցելություն չկա։
+
+// 2. Validator-ը ստուգում է փաստաթղթի կառուցվածքը, բայց չի որոնում ուրիշ հավաքածուում։
+// L7(b)-ում $lookup-ով գտնում եմ օգտատիրոջը և ստուգում նրա role դաշտը։
+// Հավելվածում այցելություն ստեղծելուց առաջ կստուգեի, որ բժիշկը գոյություն ունի և role-ը doctor է,
+// իսկ դերի փոփոխություններն ու ջնջումները նույնպես կվերահսկեի, որպեսզի հին հղումները չփչանան։
+
+// 3. Մի հավաքածուի առավելությունն ընդհանուր դաշտերի՝ name, email, phone-ի միասնական կառավարումն է։
+// Թերությունն այն է, որ պետք են դերից կախված վավերացման կանոններ և լրացուցիչ ստուգում՝
+// doctorId-ն հիվանդի ID չլինելու համար․ առանձին հավաքածուներում այդ տարբերությունն ավելի հստակ կլիներ։

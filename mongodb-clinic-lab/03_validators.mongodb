@@ -1,0 +1,874 @@
+// Անուն՝ Erik Karapetyan
+// Առաջադրանք 3՝ տվյալների վավերացում
+// Ամսաթիվ՝ 2026-11-02
+
+// Ընտրում ենք clinic փորձնական բազան։
+use("clinic");
+
+// Վերաստեղծման համար ջնջում ենք երկու փորձնական հավաքածուներն իրենց տվյալներով։
+db.users.drop();
+db.appointments.drop();
+
+// true
+
+// Սահմանում ենք օգտատիրոջ դաշտերի կանոնները։
+const nameRule = {
+  bsonType: "string",
+  minLength: 2,
+  maxLength: 80,
+};
+
+const emailRule = {
+  bsonType: "string",
+  pattern: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+};
+
+nameRule;
+
+// { bsonType: "string", minLength: 2, maxLength: 80 }
+
+const phoneRule = {
+  bsonType: "string",
+  minLength: 7,
+  maxLength: 20,
+  pattern: "^[0-9+() -]+$",
+};
+
+const doctorRule = {
+  bsonType: "object",
+  required: ["specialty", "licenseNo"],
+  properties: {
+    specialty: {
+      bsonType: "string",
+    },
+    licenseNo: {
+      bsonType: "string",
+      pattern: "^MD-[0-9]{4}$",
+    },
+  },
+};
+
+doctorRule;
+
+/*{
+  bsonType: 'object',
+  required: [ 'specialty', 'licenseNo' ],
+  properties: {
+    specialty: { bsonType: 'string' },
+    licenseNo: { bsonType: 'string', pattern: '^MD-[0-9]{4}$' }
+  }
+}*/
+
+const patientRule = {
+  bsonType: "object",
+  required: ["birthDate"],
+  properties: {
+    birthDate: {
+      bsonType: "date",
+    },
+    bloodType: {
+      enum: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
+    },
+    allergies: {
+      bsonType: "array",
+      uniqueItems: true,
+      items: {
+        bsonType: "string",
+      },
+    },
+  },
+};
+
+// Նշում ենք պարտադիր և թույլատրելի դաշտերը։ _id-ն նույնպես թույլատրում ենք։
+const usersSchema = {
+  bsonType: "object",
+  required: ["name", "email", "role", "active"],
+  additionalProperties: false,
+  properties: {
+    _id: {},
+    name: nameRule,
+    email: emailRule,
+    phone: phoneRule,
+    role: {
+      enum: ["doctor", "patient", "admin"],
+    },
+    active: {
+      bsonType: "bool",
+    },
+    createdAt: {
+      bsonType: "date",
+    },
+    doctor: doctorRule,
+    patient: patientRule,
+  },
+};
+
+usersSchema.oneOf = [
+  {
+    properties: {
+      role: { enum: ["doctor"] },
+    },
+    required: ["doctor"],
+    not: { required: ["patient"] },
+  },
+  {
+    properties: {
+      role: { enum: ["patient"] },
+    },
+    required: ["patient"],
+    not: { required: ["doctor"] },
+  },
+  {
+    properties: {
+      role: { enum: ["admin"] },
+    },
+    not: {
+      anyOf: [{ required: ["doctor"] }, { required: ["patient"] }],
+    },
+  },
+];
+
+/*[
+  {
+    properties: { role: { enum: [ 'doctor' ] } },
+    required: [ 'doctor' ],
+    not: { required: [ 'patient' ] }
+  },
+  {
+    properties: { role: { enum: [ 'patient' ] } },
+    required: [ 'patient' ],
+    not: { required: [ 'doctor' ] }
+  },
+  {
+    properties: { role: { enum: [ 'admin' ] } },
+    not: {
+      anyOf: [ { required: [ 'doctor' ] }, { required: [ 'patient' ] } ]
+    }
+  }
+]*/
+
+// Կիրառում ենք users-ի կանոնները բոլոր ավելացումների և թարմացումների համար։
+db.createCollection("users", {
+  validator: {
+    $jsonSchema: usersSchema,
+  },
+  validationLevel: "strict",
+  validationAction: "error",
+});
+
+// { ok: 1 }
+
+// Սահմանում ենք դեղի յուրաքանչյուր նշանակման կառուցվածքը։
+const prescriptionRule = {
+  bsonType: "object",
+  required: ["drug", "dose", "days"],
+  additionalProperties: false,
+  properties: {
+    drug: {
+      bsonType: "string",
+    },
+    dose: {
+      bsonType: "string",
+    },
+    days: {
+      bsonType: "number",
+      minimum: 1,
+      maximum: 365,
+    },
+  },
+};
+
+// Սահմանում ենք այցելության դաշտերի տեսակներն ու թույլատրելի արժեքները։
+const appointmentsSchema = {
+  bsonType: "object",
+  required: [
+    "doctorId",
+    "patientId",
+    "start",
+    "durationMin",
+    "reason",
+    "status",
+    "fee",
+  ],
+  additionalProperties: false,
+  properties: {
+    _id: {},
+    doctorId: {
+      bsonType: "objectId",
+    },
+    patientId: {
+      bsonType: "objectId",
+    },
+    start: {
+      bsonType: "date",
+    },
+    durationMin: {
+      bsonType: "number",
+      minimum: 5,
+      maximum: 240,
+    },
+    reason: {
+      bsonType: "string",
+      minLength: 3,
+      maxLength: 200,
+    },
+    status: {
+      enum: ["scheduled", "completed", "cancelled"],
+    },
+    fee: {
+      bsonType: "number",
+      minimum: 0,
+    },
+    notes: {
+      bsonType: "string",
+    },
+    prescriptions: {
+      bsonType: "array",
+      maxItems: 10,
+      items: prescriptionRule,
+    },
+  },
+};
+
+db.createCollection("appointments", {
+  validator: {
+    $jsonSchema: appointmentsSchema,
+  },
+  validationLevel: "strict",
+  validationAction: "error",
+});
+//{ ok: 1 }
+
+// Լրացուցիչ փորձ։ 4 րոպեն փոքր է նվազագույն 5 րոպեից։
+db.appointments.insertOne({
+  doctorId: new ObjectId(),
+  patientId: new ObjectId(),
+  start: new Date(),
+  durationMin: 4,
+  reason: "Validation test",
+  status: "scheduled",
+  fee: 0,
+});
+
+/*clinic> db.appointments.insertOne({
+|   doctorId: new ObjectId(),
+|   patientId: new ObjectId(),
+|   start: new Date(),
+|   durationMin: 4,
+|   reason: "Validation test",
+|   status: "scheduled",
+|   fee: 0,
+| });
+Uncaught:
+MongoServerError: Document failed validation
+Additional information: {
+  failingDocumentId: ObjectId('6aea4378b63740fb146fa9e1'),
+  details: {
+    operatorName: '$jsonSchema',
+    schemaRulesNotSatisfied: [
+      {
+        operatorName: 'properties',
+        propertiesNotSatisfied: [
+          {
+            propertyName: 'durationMin',
+            details: [
+              {
+                operatorName: 'minimum',
+                specifiedAs: { minimum: 5 },
+                reason: 'comparison failed',
+                consideredValue: 4
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+clinic> */
+
+// I — Բժշկի պարտադիր doctor օբյեկտը բացակայում է։
+db.users.insertOne({
+  name: "Test Doctor",
+  email: "test-doctor@example.com",
+  role: "doctor",
+  active: true,
+});
+
+/*Uncaught:
+MongoServerError: Document failed validation
+Additional information: {
+  failingDocumentId: ObjectId('6aea440ab63740fb146fa9e2'),
+  details: {
+    operatorName: '$jsonSchema',
+    schemaRulesNotSatisfied: [
+      {
+        operatorName: 'oneOf',
+        schemasNotSatisfied: [
+          {
+            index: 0,
+            details: [
+              {
+                operatorName: 'required',
+                specifiedAs: { required: [ 'doctor' ] },
+                missingProperties: [ 'doctor' ]
+              }
+            ]
+          },
+          {
+            index: 1,
+            details: [
+              {
+                operatorName: 'properties',
+                propertiesNotSatisfied: [
+                  {
+                    propertyName: 'role',
+                    details: [
+                      {
+                        operatorName: 'enum',
+                        specifiedAs: { enum: [ 'patient' ] },
+                        reason: 'value was not found in enum',
+                        consideredValue: 'doctor'
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                operatorName: 'required',
+                specifiedAs: { required: [ 'patient' ] },
+                missingProperties: [ 'patient' ]
+              }
+            ]
+          },
+          {
+            index: 2,
+            details: [
+              {
+                operatorName: 'properties',
+                propertiesNotSatisfied: [
+                  {
+                    propertyName: 'role',
+                    details: [
+                      {
+                        operatorName: 'enum',
+                        specifiedAs: { enum: [ 'admin' ] },
+                        reason: 'value was not found in enum',
+                        consideredValue: 'doctor'
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+  */
+// K — Վավեր բժիշկ։ Այս գրառումը կօգտագործենք N փորձի համար։
+db.users.insertOne({
+  name: "Test Doctor",
+  email: "test-doctor@example.com",
+  role: "doctor",
+  active: true,
+  doctor: {
+    specialty: "Cardiology",
+    licenseNo: "MD-1234",
+  },
+});
+
+//{
+//  acknowledged: true,
+//  insertedId: ObjectId('6aea465cb63740fb146fa9e3')
+//}
+
+// A — Բացակայում է պարտադիր email դաշտը։
+db.users.insertOne({
+  name: "Test Admin",
+  role: "admin",
+  active: true,
+});
+
+/*MongoServerError: Document failed validation
+Additional information: {
+  failingDocumentId: ObjectId('6aea473ab63740fb146fa9e4'),
+  details: {
+    operatorName: '$jsonSchema',
+    schemaRulesNotSatisfied: [
+      {
+        operatorName: 'required',
+        specifiedAs: { required: [ 'name', 'email', 'role', 'active' ] },
+        missingProperties: [ 'email' ]
+      }
+    ]
+  }
+}*/
+
+// E — Email-ը չի համապատասխանում pattern կանոնին։
+db.users.insertOne({
+  name: "Test Admin",
+  email: "invalid-email",
+  role: "admin",
+  active: true,
+});
+/*MongoServerError: Document failed validation
+Additional information: {
+  failingDocumentId: ObjectId('6aea47e2b63740fb146fa9e5'),
+  details: {
+    operatorName: '$jsonSchema',
+    schemaRulesNotSatisfied: [
+      {
+        operatorName: 'properties',
+        propertiesNotSatisfied: [
+          {
+            propertyName: 'email',
+            details: [
+              {
+                operatorName: 'pattern',
+                specifiedAs: { pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$' },
+                reason: 'regular expression did not match',
+                consideredValue: 'invalid-email'
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}*/
+
+/*Uncaught:
+MongoServerError: Document failed validation
+Additional information: {
+  failingDocumentId: ObjectId('6aea4a30b63740fb146fa9e6'),
+  details: {
+    operatorName: '$jsonSchema',
+    schemaRulesNotSatisfied: [
+      {
+        operatorName: 'properties',
+        propertiesNotSatisfied: [
+          {
+            propertyName: 'role',
+            details: [
+              {
+                operatorName: 'enum',
+                specifiedAs: { enum: [ 'doctor', 'patient', 'admin' ] },
+                reason: 'value was not found in enum',
+                consideredValue: 'nurse'
+              }
+            ]
+          }
+        ]
+      },
+      {
+        operatorName: 'oneOf',
+        schemasNotSatisfied: [
+          {
+            index: 0,
+            details: [
+              {
+                operatorName: 'properties',
+                propertiesNotSatisfied: [
+                  {
+                    propertyName: 'role',
+                    details: [
+                      {
+                        operatorName: 'enum',
+                        specifiedAs: { enum: [ 'doctor' ] },
+                        reason: 'value was not found in enum',
+                        consideredValue: 'nurse'
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                operatorName: 'required',
+                specifiedAs: { required: [ 'doctor' ] },
+                missingProperties: [ 'doctor' ]
+              }
+            ]
+          },
+          {
+            index: 1,
+            details: [
+              {
+                operatorName: 'properties',
+                propertiesNotSatisfied: [
+                  {
+                    propertyName: 'role',
+                    details: [
+                      {
+                        operatorName: 'enum',
+                        specifiedAs: { enum: [ 'patient' ] },
+                        reason: 'value was not found in enum',
+                        consideredValue: 'nurse'
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                operatorName: 'required',
+                specifiedAs: { required: [ 'patient' ] },
+                missingProperties: [ 'patient' ]
+              }
+            ]
+          },
+          {
+            index: 2,
+            details: [
+              {
+                operatorName: 'properties',
+                propertiesNotSatisfied: [
+                  {
+                    propertyName: 'role',
+                    details: [
+                      {
+                        operatorName: 'enum',
+                        specifiedAs: { enum: [ 'admin' ] },
+                        reason: 'value was not found in enum',
+                        consideredValue: 'nurse'
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+*/
+
+// B — start-ի արժեքը տեքստ է, իսկ կանոնը պահանջում է ամսաթիվ։
+db.appointments.insertOne({
+  doctorId: new ObjectId(),
+  patientId: new ObjectId(),
+  start: "2026-11-05T10:00:00Z",
+  durationMin: 30,
+  reason: "Validation test",
+  status: "scheduled",
+  fee: 0,
+});
+/*Uncaught:
+MongoServerError: Document failed validation
+Additional information: {
+  failingDocumentId: ObjectId('6aea4aeab63740fb146fa9e9'),
+  details: {
+    operatorName: '$jsonSchema',
+    schemaRulesNotSatisfied: [
+      {
+        operatorName: 'properties',
+        propertiesNotSatisfied: [
+          {
+            propertyName: 'start',
+            details: [
+              {
+                operatorName: 'bsonType',
+                specifiedAs: { bsonType: 'date' },
+                reason: 'type did not match',
+                consideredValue: '2026-11-05T10:00:00Z',
+                consideredType: 'string'
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}*/
+
+// F — extraField-ը սխեմայում նշված չէ։
+db.users.insertOne({
+  name: "Test Admin",
+  email: "test-admin@example.com",
+  role: "admin",
+  active: true,
+  extraField: "unexpected",
+});
+
+/*MongoServerError: Document failed validation
+Additional information: {
+  failingDocumentId: ObjectId('6aea4b78b63740fb146fa9ea'),
+  details: {
+    operatorName: '$jsonSchema',
+    schemaRulesNotSatisfied: [
+      {
+        operatorName: 'additionalProperties',
+        specifiedAs: { additionalProperties: false },
+        additionalProperties: [ 'extraField' ]
+      }
+    ]
+  }
+}*/
+
+// G — prescriptions-ի առաջին տարրում բացակայում է days դաշտը։
+db.appointments.insertOne({
+  doctorId: new ObjectId(),
+  patientId: new ObjectId(),
+  start: new Date("2026-11-05T10:00:00Z"),
+  durationMin: 30,
+  reason: "Validation test",
+  status: "scheduled",
+  fee: 0,
+  prescriptions: [{ drug: "Test medicine", dose: "5 mg" }],
+});
+
+/*Uncaught:
+MongoServerError: Document failed validation
+Additional information: {
+  failingDocumentId: ObjectId('6aea4faab63740fb146fa9ed'),
+  details: {
+    operatorName: '$jsonSchema',
+    schemaRulesNotSatisfied: [
+      {
+        operatorName: 'properties',
+        propertiesNotSatisfied: [
+          {
+            propertyName: 'prescriptions',
+            details: [
+              {
+                operatorName: 'items',
+                reason: 'At least one item did not match the sub-schema',
+                itemIndex: 0,
+                details: [
+                  {
+                    operatorName: 'required',
+                    specifiedAs: { required: [ 'drug', 'dose', 'days' ] },
+                    missingProperties: [ 'days' ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+*/
+
+// H — fee-ի համար պահանջվում է թիվ, իսկ ստացված արժեքը null է։
+db.appointments.insertOne({
+  doctorId: new ObjectId(),
+  patientId: new ObjectId(),
+  start: new Date("2026-11-05T10:00:00Z"),
+  durationMin: 30,
+  reason: "Validation test",
+  status: "scheduled",
+  fee: null,
+});
+
+/*MongoServerError: Document failed validation
+Additional information: {
+  failingDocumentId: ObjectId('6aea50f1b63740fb146fa9f0'),
+  details: {
+    operatorName: '$jsonSchema',
+    schemaRulesNotSatisfied: [
+      {
+        operatorName: 'properties',
+        propertiesNotSatisfied: [
+          {
+            propertyName: 'fee',
+            details: [
+              {
+                operatorName: 'bsonType',
+                specifiedAs: { bsonType: 'number' },
+                reason: 'type did not match',
+                consideredValue: null,
+                consideredType: 'null'
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}*/
+
+
+// C — nurse-ը role-ի թույլատրելի արժեք չէ։
+db.users.insertOne({
+  name: "Test User",
+  email: "test-user@example.com",
+  role: "nurse",
+  active: true,
+});
+// Նախորդ փորձի արդյունքը վերևում է՝ consideredValue: 'nurse'։
+
+// D — Առաջադրանքում նշված 0 րոպեն խախտում է minimum: 5 կանոնը։
+db.appointments.insertOne({
+  doctorId: new ObjectId(),
+  patientId: new ObjectId(),
+  start: new Date("2026-11-05T10:00:00Z"),
+  durationMin: 0,
+  reason: "Validation test",
+  status: "scheduled",
+  fee: 0,
+});
+// Սպասվում է՝ MongoServerError: Document failed validation
+
+// J — Հիվանդի փաստաթղթում doctor դաշտն արգելված է։
+db.users.insertOne({
+  name: "Test Patient",
+  email: "validation-patient@example.com",
+  role: "patient",
+  active: true,
+  patient: { birthDate: new Date("1995-06-15") },
+  doctor: { specialty: "Cardiology", licenseNo: "MD-1234" },
+});
+// Սպասվում է՝ MongoServerError: Document failed validation
+
+// L–N — Վավեր հիվանդ, ադմին և այցելություն։ Գործարկել որպես մեկ բլոկ։
+{
+  const doctor = db.users.findOne({
+    email: "test-doctor@example.com",
+    role: "doctor",
+  });
+  if (!doctor) throw new Error("Նախ գործարկիր K փորձը՝ վավեր բժշկի ավելացումը։");
+
+  const patientResult = db.users.insertOne({
+    name: "Validation Test Patient",
+    email: "validation-patient@example.com",
+    role: "patient",
+    active: true,
+    patient: { birthDate: new Date("1995-06-15") },
+  });
+  printjson(patientResult);
+  // L — Սպասվում է acknowledged: true և insertedId։
+
+  const adminResult = db.users.insertOne({
+    name: "Validation Test Admin",
+    email: "validation-admin@example.com",
+    role: "admin",
+    active: true,
+  });
+  printjson(adminResult);
+  // M — Սպասվում է acknowledged: true և insertedId։
+
+  const appointmentResult = db.appointments.insertOne({
+    doctorId: doctor._id,
+    patientId: patientResult.insertedId,
+    start: new Date("2026-11-05T10:00:00Z"),
+    durationMin: 30,
+    reason: "Validation test",
+    status: "scheduled",
+    fee: 0,
+    prescriptions: [{ drug: "Test medicine", dose: "5 mg", days: 3 }],
+  });
+  printjson(appointmentResult);
+  // N — Սպասվում է acknowledged: true և insertedId։
+
+  // Ջնջում ենք փորձնական այցելությունը, հետո երեք օգտատերերին։
+  printjson(db.appointments.deleteOne({ _id: appointmentResult.insertedId }));
+  printjson(db.users.deleteMany({
+    _id: { $in: [doctor._id, patientResult.insertedId, adminResult.insertedId] },
+  }));
+  // Սպասվում է համապատասխանաբար deletedCount: 1 և deletedCount: 3։
+}
+
+// Փորձնական միգրացիա scratch_appointments հավաքածուում։
+db.createCollection("scratch_appointments");
+// Սպասվում է { ok: 1 }։
+
+db.scratch_appointments.insertMany([
+  { reason: "Valid appointment", status: "scheduled", fee: 0 },
+  { reason: "Old invalid status", status: "done", fee: 0 },
+  { reason: "Old invalid fee", status: "scheduled", fee: -5 },
+]);
+// Սպասվում է երեք ավելացված փաստաթուղթ։
+
+const scratchSchema = {
+  bsonType: "object",
+  required: ["status", "fee"],
+  properties: {
+    status: { enum: ["scheduled", "completed", "cancelled"] },
+    fee: { bsonType: "number", minimum: 0 },
+  },
+};
+
+// i — Սահմանում ենք կանոնները՝ առանց սխալ գրառումներն արգելափակելու։
+db.runCommand({
+  collMod: "scratch_appointments",
+  validator: { $jsonSchema: scratchSchema },
+  validationLevel: "moderate",
+  validationAction: "warn",
+});
+// Սպասվում է { ok: 1 }։
+
+// ii — Նոր սխալ գրառումը պահպանվում է, իսկ սերվերը զգուշացում է գրանցում։
+db.scratch_appointments.insertOne({
+  reason: "New invalid status",
+  status: "done",
+  fee: 0,
+});
+// Սպասվում է acknowledged: true։
+
+// iii — moderate-ը չի վավերացնում արդեն անվավեր փաստաթղթի այս փոփոխությունը։
+db.scratch_appointments.updateOne(
+  { reason: "Old invalid status" },
+  { $set: { reason: "Updated old invalid status" } },
+);
+// Սպասվում է matchedCount: 1, modifiedCount: 1։
+
+// iv — Ցուցադրում ենք սխեմային չհամապատասխանող բոլոր փաստաթղթերը։
+db.scratch_appointments.find({
+  $nor: [{ $jsonSchema: scratchSchema }],
+}).toArray();
+// Սպասվում է երեք փաստաթուղթ։
+
+// v — Ուղղում ենք սխալ կարգավիճակներն ու բացասական վճարը։
+db.scratch_appointments.updateMany(
+  { status: "done" },
+  { $set: { status: "completed" } },
+);
+// Սպասվում է modifiedCount: 2։
+
+db.scratch_appointments.updateMany(
+  { fee: { $lt: 0 } },
+  { $set: { fee: 0 } },
+);
+// Սպասվում է modifiedCount: 1։
+
+db.runCommand({
+  collMod: "scratch_appointments",
+  validationLevel: "strict",
+  validationAction: "error",
+});
+// Սպասվում է { ok: 1 }։
+
+// Կրկնում ենք ii քայլի նույն սխալ ավելացումը։
+db.scratch_appointments.insertOne({
+  reason: "New invalid status",
+  status: "done",
+  fee: 0,
+});
+// Սպասվում է՝ MongoServerError: Document failed validation
+
+
+// vi — Մերժումը ստանալուց հետո առանձին գործարկել մաքրումը։
+db.scratch_appointments.drop();
+// Սպասվում է true։
+
+// Ստուգում ենք users հավաքածուի վավերացման կարգավորումները։
+const usersOptions = db.getCollectionInfos({ name: "users" })[0].options;
+printjson({
+  validationLevel: usersOptions.validationLevel,
+  validationAction: usersOptions.validationAction,
+});
+// Սպասվում է { validationLevel: 'strict', validationAction: 'error' }։
+
+// 1. Սխեման կարող է ստուգել, որ doctorId-ն ObjectId է։ Այն չի կարող
+// ստուգել՝ այդ ID-ով օգտատեր գոյություն ունի՞ users-ում։ Սխեման նաև
+// չի կարող ստուգել՝ այդ օգտատիրոջ դերը doctor է՞։
+
+// 2. strict-ը ստուգում է բոլոր նոր և թարմացվող փաստաթղթերը։
+// moderate-ը ստուգում է նոր փաստաթղթերը և արդեն վավեր փաստաթղթերի
+// թարմացումները։ moderate-ից կսկսեի հին տվյալների միգրացիայի
+// ժամանակ, որպեսզի կարողանամ աստիճանաբար ուղղել անվավեր գրառումները։

@@ -1,0 +1,189 @@
+// Անուն՝ Erik Karapetyan
+// Առաջադրանք 4՝ որոնում, փոփոխում և ջնջում ըստ պայմանների
+// Ամսաթիվ՝ 2026-11-04
+// Գործարկել lab-admin կապով։ Ամեն ամբողջական գործարկումից առաջ գործարկել 04_seed.mongodb։
+// Ստորև արդյունքները վերաբերում են նորից լրացված սկզբնական տվյալներին։
+
+use("clinic");
+
+// R1 — Բոլոր բժիշկները։
+db.users.find({ role: "doctor" }).toArray();
+// Արդյունք՝ 3 օգտատեր՝ Dr. Elena Rossi, Dr. Hamid Karimi, Dr. Sofia Lindqvist։
+
+// R2 — Միայն ակտիվ բժիշկները։
+db.users.find({ role: "doctor", active: true }).toArray();
+// Արդյունք՝ 2 օգտատեր՝ Dr. Elena Rossi, Dr. Hamid Karimi։
+
+// R3 — Հեռախոս չունեցող հիվանդները։
+db.users.find({ role: "patient", phone: { $exists: false } }).toArray();
+// Արդյունք՝ 1 օգտատեր՝ Clara Meyer։
+
+// R4 — Պենիցիլինից ալերգիա ունեցող հիվանդները։
+db.users.find({ role: "patient", "patient.allergies": "penicillin" }).toArray();
+// Արդյունք՝ 1 օգտատեր՝ Ana Costa։
+
+// R5 — Ալերգիաների զանգվածը դատարկ է կամ դաշտն ընդհանրապես չկա։
+db.users
+  .find({
+    role: "patient",
+    $or: [
+      { "patient.allergies": { $size: 0 } },
+      { "patient.allergies": { $exists: false } },
+    ],
+  })
+  .toArray();
+// Արդյունք՝ 2 օգտատեր՝ Ben Okoye, Eva Nilsson։
+
+// R6 — 1990 թվականի հունվարի 1-ից առաջ ծնված հիվանդները։
+db.users
+  .find({
+    role: "patient",
+    "patient.birthDate": { $lt: new Date("1990-01-01T00:00:00Z") },
+  })
+  .toArray();
+// Արդյունք՝ 2 օգտատեր՝ Ana Costa, Dmitri Volkov։
+
+// R7 — Մարտի այցելությունները՝ ամենավաղից սկսած։
+db.appointments
+  .find({
+    start: {
+      $gte: new Date("2025-03-01T00:00:00Z"),
+      $lt: new Date("2025-04-01T00:00:00Z"),
+    },
+  })
+  .sort({ start: 1 })
+  .toArray();
+// Արդյունք՝ 5 այցելություն՝ Blood pressure check, Vaccination, Palpitations, Follow-up, Stress test։
+
+// R8 — Ավարտված այցելություններ՝ 80–130 ներառյալ վճարով։ Ցույց ենք տալիս միայն reason և fee։
+db.appointments
+  .find(
+    { status: "completed", fee: { $gte: 80, $lte: 130 } },
+    { _id: 0, reason: 1, fee: 1 },
+  )
+  .toArray();
+// Արդյունք՝ [ { reason: 'Chest pain follow-up', fee: 120 },
+// { reason: 'Fever', fee: 80 }, { reason: 'Blood pressure check', fee: 90 } ]
+
+// R9 — Պատճառի ցանկացած մասում follow-up ունեցող այցելությունների քանակը։
+db.appointments.countDocuments({
+  reason: { $regex: "follow-up", $options: "i" },
+});
+// Արդյունք՝ 2։
+
+// R10 — Նույն նշանակման մեջ atenolol և առնվազն 7 օր։
+db.appointments
+  .find({
+    prescriptions: { $elemMatch: { drug: "atenolol", days: { $gte: 7 } } },
+  })
+  .toArray();
+// Արդյունք՝ 1 այցելություն՝ Chest pain follow-up։
+
+// U1 — Ակտիվացնում ենք Dr. Sofia Lindqvist-ին։
+db.users.updateOne(
+  { email: "sofia.lindqvist@clinic.test", role: "doctor" },
+  { $set: { active: true } },
+);
+// Արդյունք՝ acknowledged: true, matchedCount: 1, modifiedCount: 1։
+
+// U2 — Բոլոր պլանավորված այցելությունների վճարն ավելացնում ենք 10-ով։
+db.appointments.updateMany({ status: "scheduled" }, { $inc: { fee: 10 } });
+// Արդյունք՝ acknowledged: true, matchedCount: 3, modifiedCount: 3։
+
+// U3 — Ben-ի ալերգիաներին ավելացնում ենք latex՝ առանց կրկնության։
+db.users.updateOne(
+  { email: "ben.okoye@example.com", role: "patient" },
+  { $addToSet: { "patient.allergies": "latex" } },
+);
+// Արդյունք՝ matchedCount: 1, modifiedCount: 1։
+db.users.updateOne(
+  { email: "ben.okoye@example.com", role: "patient" },
+  { $addToSet: { "patient.allergies": "latex" } },
+);
+// Արդյունք՝ matchedCount: 1, modifiedCount: 0։
+
+// U4 — Չեղարկում ենք Palpitations այցելությունը և զրոյացնում վճարը։
+db.appointments.updateOne(
+  { reason: "Palpitations" },
+  { $set: { status: "cancelled", fee: 0 } },
+);
+// Արդյունք՝ matchedCount: 1, modifiedCount: 1։
+
+// U5 — Ավելացնում ենք առաջին նշանակումը․ $push-ը նաև ստեղծում է բացակայող զանգվածը։
+db.appointments.updateOne(
+  { reason: "Blood pressure check" },
+  { $push: { prescriptions: { drug: "amlodipine", dose: "5mg", days: 30 } } },
+);
+// Արդյունք՝ matchedCount: 1, modifiedCount: 1։
+db.appointments.findOne(
+  { reason: "Blood pressure check" },
+  { _id: 0, prescriptions: 1 },
+);
+// Արդյունք՝ { prescriptions: [ { drug: 'amlodipine', dose: '5mg', days: 30 } ] }
+
+// U6 — Եթե Felix-ը չկա, upsert-ը ստեղծում է վավեր հիվանդի փաստաթուղթ։
+db.users.updateOne(
+  { email: "felix.brandt@example.com" },
+  {
+    $set: {
+      name: "Felix Brandt",
+      role: "patient",
+      active: true,
+      patient: { birthDate: new Date("1995-01-15T00:00:00Z") },
+    },
+  },
+  { upsert: true },
+);
+// Արդյունք՝ matchedCount: 0, modifiedCount: 0, upsertedCount: 1, insertedId: նոր ObjectId։
+// Իմ mongosh-ում նոր ID-ն returned result-ի insertedId դաշտում է՝ upsertedId-ի փոխարեն։
+db.users.countDocuments({});
+// Արդյունք՝ 10։
+
+// U7 — Արգելված դերի փորձ։ Բռնում ենք միայն սպասվող սխալը, որ ֆայլը շարունակի աշխատել։
+try {
+  db.users.updateOne(
+    { email: "ben.okoye@example.com", role: "patient" },
+    { $set: { role: "superuser" } },
+  );
+  throw new Error("U7․ validator-ը չմերժեց superuser դերը");
+} catch (error) {
+  if (error.code !== 121) throw error;
+  console.log(error.name + ": " + error.message);
+}
+// Արդյունք՝ MongoServerError: Document failed validation (code: 121)։
+// role-ը չի համապատասխանում enum-ին և oneOf-ի ճյուղերից ոչ մեկին։
+
+// D1 — Ջնջում ենք upsert-ով ստեղծված Felix-ին։
+db.users.deleteOne({ email: "felix.brandt@example.com", role: "patient" });
+// Արդյունք՝ acknowledged: true, deletedCount: 1։
+
+// D2 — Ջնջում ենք սկզբնական և U4-ում չեղարկված այցելությունները։
+db.appointments.deleteMany({ status: "cancelled" });
+// Արդյունք՝ acknowledged: true, deletedCount: 2։
+
+// D3 — Ana-ի ID-ն գտնում ենք հարցումով, սկզբում ջնջում նրա այցելությունները։
+const ana = db.users.findOne({
+  email: "ana.costa@example.com",
+  role: "patient",
+});
+if (!ana)
+  throw new Error("Ana Costa-ն չի գտնվել․ նախ գործարկել 04_seed.mongodb");
+console.log(db.appointments.deleteMany({ patientId: ana._id }));
+// Արդյունք՝ { acknowledged: true, deletedCount: 3 }
+console.log(db.users.deleteOne({ _id: ana._id, role: "patient" }));
+// Արդյունք՝ { acknowledged: true, deletedCount: 1 }
+
+console.log({
+  users: db.users.countDocuments({}),
+  appointments: db.appointments.countDocuments({}),
+});
+// Արդյունք՝ { users: 8, appointments: 4 }
+
+// 1. Սկզբում ջնջում եմ Ana-ի այցելությունները, հետո հենց օգտատիրոջը։
+// MongoDB-ն ինքնուրույն չի ջնջում հղում ունեցող փաստաթղթերը․ միայն օգտատիրոջը
+// ջնջելու դեպքում կմնային գոյություն չունեցող հիվանդի ID-ով այցելություններ։
+
+// 2. Օգտագործել եմ $elemMatch, որպեսզի երկու պայմանը վերաբերի նույն նշանակմանը։
+// Օրինակ՝ { prescriptions: [ { drug: 'atenolol', dose: '25mg', days: 3 },
+// { drug: 'paracetamol', dose: '500mg', days: 10 } ] } հատվածով այցելության դեպքում
+// առանձին dot notation պայմանները կհամընկնեն տարբեր տարրերի հետ, իսկ $elemMatch-ը՝ ոչ։

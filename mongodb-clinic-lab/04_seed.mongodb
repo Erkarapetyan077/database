@@ -1,0 +1,198 @@
+// Անուն՝ Erik Karapetyan
+// Առաջադրանք 4՝ կլինիկայի սկզբնական տվյալներ
+// Ամսաթիվ՝ 2026-11-04
+// Գործարկել lab-admin կապով՝ 03_validators.mongodb-ից հետո։
+// Կրկին գործարկելիս տվյալները վերականգնվում են, իսկ validator-ները պահպանվում են։
+
+use("clinic");
+
+// Սկզբում մաքրում ենք այցելությունները, հետո՝ օգտատերերին։
+db.appointments.deleteMany({});
+// Առաջին գործարկման deletedCount-ը կախված է նախորդ փորձերից, կրկնելիս՝ 9։
+db.users.deleteMany({});
+// Առաջին գործարկման deletedCount-ը կախված է նախորդ փորձերից, կրկնելիս՝ 9։
+
+// Ավելացնում ենք U1–U9 օգտատերերին և պահում սերվերի վերադարձրած ID-ները։
+const insertedUsers = db.users.insertMany([
+  {
+    name: "Dr. Elena Rossi",
+    email: "elena.rossi@clinic.test",
+    phone: "555-0201",
+    role: "doctor",
+    active: true,
+    doctor: { specialty: "cardiology", licenseNo: "MD-1001" },
+  },
+  {
+    name: "Dr. Hamid Karimi",
+    email: "hamid.karimi@clinic.test",
+    phone: "555-0202",
+    role: "doctor",
+    active: true,
+    doctor: { specialty: "pediatrics", licenseNo: "MD-1002" },
+  },
+  {
+    name: "Dr. Sofia Lindqvist",
+    email: "sofia.lindqvist@clinic.test",
+    role: "doctor",
+    active: false,
+    doctor: { specialty: "dermatology", licenseNo: "MD-1003" },
+  },
+  {
+    name: "Ana Costa",
+    email: "ana.costa@example.com",
+    phone: "555-0301",
+    role: "patient",
+    active: true,
+    patient: {
+      birthDate: new Date("1985-04-12T00:00:00Z"),
+      bloodType: "A+",
+      allergies: ["penicillin"],
+    },
+  },
+  {
+    name: "Ben Okoye",
+    email: "ben.okoye@example.com",
+    phone: "555-0302",
+    role: "patient",
+    active: true,
+    patient: {
+      birthDate: new Date("1990-11-02T00:00:00Z"),
+      bloodType: "O-",
+      allergies: [],
+    },
+  },
+  {
+    name: "Clara Meyer",
+    email: "clara.meyer@example.com",
+    role: "patient",
+    active: true,
+    patient: {
+      birthDate: new Date("2015-06-30T00:00:00Z"),
+      bloodType: "B+",
+      allergies: ["peanuts", "latex"],
+    },
+  },
+  {
+    name: "Dmitri Volkov",
+    email: "dmitri.volkov@example.com",
+    phone: "555-0304",
+    role: "patient",
+    active: true,
+    patient: {
+      birthDate: new Date("1972-02-19T00:00:00Z"),
+      allergies: ["sulfa"],
+    },
+  },
+  {
+    name: "Eva Nilsson",
+    email: "eva.nilsson@example.com",
+    phone: "555-0305",
+    role: "patient",
+    active: true,
+    patient: { birthDate: new Date("1998-09-05T00:00:00Z"), bloodType: "AB+" },
+  },
+  {
+    name: "Maya Admin",
+    email: "maya@clinic.test",
+    phone: "555-0100",
+    role: "admin",
+    active: true,
+  },
+]);
+// Արդյունք՝ acknowledged: true, insertedIds-ում՝ 9 նոր ObjectId։
+
+const userIds = insertedUsers.insertedIds;
+
+// A1–A9 այցելություններ․ երկու հղումներն էլ users հավաքածուի ID-ներ են։
+db.appointments.insertMany([
+  {
+    doctorId: userIds[0],
+    patientId: userIds[3],
+    start: new Date("2025-02-03T09:00:00Z"),
+    durationMin: 30,
+    reason: "Chest pain follow-up",
+    status: "completed",
+    fee: 120,
+    prescriptions: [{ drug: "atenolol", dose: "25mg", days: 30 }],
+  },
+  {
+    doctorId: userIds[0],
+    patientId: userIds[6],
+    start: new Date("2025-02-03T10:00:00Z"),
+    durationMin: 45,
+    reason: "ECG",
+    status: "completed",
+    fee: 150,
+  },
+  {
+    doctorId: userIds[1],
+    patientId: userIds[5],
+    start: new Date("2025-02-05T14:00:00Z"),
+    durationMin: 30,
+    reason: "Fever",
+    status: "completed",
+    fee: 80,
+    prescriptions: [{ drug: "paracetamol", dose: "250mg", days: 3 }],
+  },
+  {
+    doctorId: userIds[0],
+    patientId: userIds[3],
+    start: new Date("2025-03-10T09:30:00Z"),
+    durationMin: 30,
+    reason: "Blood pressure check",
+    status: "completed",
+    fee: 90,
+  },
+  {
+    doctorId: userIds[1],
+    patientId: userIds[4],
+    start: new Date("2025-03-12T11:00:00Z"),
+    durationMin: 20,
+    reason: "Vaccination",
+    status: "completed",
+    fee: 60,
+  },
+  {
+    doctorId: userIds[0],
+    patientId: userIds[4],
+    start: new Date("2025-03-20T16:00:00Z"),
+    durationMin: 30,
+    reason: "Palpitations",
+    status: "scheduled",
+    fee: 100,
+  },
+  {
+    doctorId: userIds[1],
+    patientId: userIds[5],
+    start: new Date("2025-03-25T14:00:00Z"),
+    durationMin: 30,
+    reason: "Follow-up",
+    status: "scheduled",
+    fee: 70,
+  },
+  {
+    doctorId: userIds[0],
+    patientId: userIds[6],
+    start: new Date("2025-03-28T09:00:00Z"),
+    durationMin: 30,
+    reason: "Stress test",
+    status: "cancelled",
+    fee: 0,
+  },
+  {
+    doctorId: userIds[0],
+    patientId: userIds[3],
+    start: new Date("2025-04-02T10:00:00Z"),
+    durationMin: 30,
+    reason: "Test results",
+    status: "scheduled",
+    fee: 90,
+  },
+]);
+// Արդյունք՝ acknowledged: true, insertedIds-ում՝ 9 նոր ObjectId։
+
+console.log({
+  users: db.users.countDocuments({}),
+  appointments: db.appointments.countDocuments({}),
+});
+// Արդյունք՝ { users: 9, appointments: 9 }
