@@ -1,4 +1,3 @@
-const validation = require("../utils/validation");
 const { COURSE_NOT_FOUND } = require("../constants/errors/course.errors");
 const {
   LESSON_NOT_FOUND,
@@ -8,11 +7,11 @@ const ROLES = require("../constants/roles");
 const { Course, Lesson, Enrollment } = require("../models");
 const AppError = require("../utils/AppError");
 
-const getCourseLessons = async (courseId, currentUser, pagination) => {
+const getCourseLessons = async (courseId, currentUser) => {
   const course = await Course.findByPk(courseId);
 
   if (!course) {
-    throw new AppError(COURSE_NOT_FOUND, 404);
+    throw new AppError(LESSON_NOT_FOUND, 404);
   }
 
   const enrollment = await Enrollment.findOne({
@@ -34,7 +33,6 @@ const getCourseLessons = async (courseId, currentUser, pagination) => {
   }
 
   const lessons = await Lesson.findAll({
-    ...pagination,
     where: {
       courseId: courseId,
     },
@@ -78,7 +76,6 @@ const getLessonById = async (lessonId, currentUser) => {
 };
 
 const updateLesson = async (lessonId, data, currentUser) => {
-  validation.lesson(data, true);
   const lesson = await Lesson.findByPk(lessonId);
 
   if (!lesson) {

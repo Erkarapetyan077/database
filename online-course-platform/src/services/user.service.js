@@ -1,12 +1,10 @@
-const validation = require("../utils/validation");
 const { User } = require("../models");
 
 const AppError = require("../utils/AppError");
 
 const USER_ERRORS = require("../constants/errors/user.errors");
 
-const getUsers = async (role, pagination) => {
-  if (role !== undefined) validation.role(role);
+const getUsers = async (role) => {
   const where = {};
 
   if (role) {
@@ -15,8 +13,6 @@ const getUsers = async (role, pagination) => {
 
   const users = await User.findAll({
     where: where,
-    ...pagination,
-    order: [["id", "ASC"]],
     attributes: {
       exclude: ["password"],
     },
@@ -25,7 +21,7 @@ const getUsers = async (role, pagination) => {
   return users;
 };
 
-const getUserById = async (id) => {
+const getUsersById = async (id) => {
   const user = await User.findByPk(id, {
     attributes: {
       exclude: ["password"],
@@ -39,9 +35,7 @@ const getUserById = async (id) => {
   return user;
 };
 
-const updateUserRole = async (id, role, currentUserId) => {
-  validation.role(role);
-  if (Number(id) === currentUserId) throw new AppError(USER_ERRORS.CANNOT_CHANGE_OWN_ROLE, 400);
+const updateUserRole = async (id, role) => {
   const user = await User.findByPk(id);
 
   if (!user) {
@@ -52,7 +46,7 @@ const updateUserRole = async (id, role, currentUserId) => {
 
   await user.save();
 
-  return getUserById(id);
+  return user;
 };
 
 const deleteUser = async (id, currentUserId) => {
@@ -71,7 +65,7 @@ const deleteUser = async (id, currentUserId) => {
 
 module.exports = {
   getUsers,
-  getUserById,
+  getUsersById,
   updateUserRole,
   deleteUser,
 };
