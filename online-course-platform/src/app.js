@@ -3,12 +3,11 @@ const express = require("express");
 const app = express();
 
 app.use(express.json());
-app.use(require("./middlewares/validateRequest").validateBody);
 
 const authRoutes = require("./routes/auth.routes");
 const userRoutes = require("./routes/user.routes");
 const courseRoutes = require("./routes/course.routes");
-const lessonRoutes = require("./routes/lesson.routes");
+const lessonRoutes = require("./routes/ lesson.routes");
 const enrollmentRoutes = require("./routes/enrollment.routes");
 
 const errorHandler = require("./middlewares/errorHandler");

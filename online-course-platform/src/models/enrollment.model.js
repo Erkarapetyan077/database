@@ -39,7 +39,6 @@ const Enrollment = sequelize.define(
 
     progress: {
       type: DataTypes.INTEGER,
-      validate: { min: 0, max: 100, isInt: true },
       allowNull: false,
       defaultValue: 0,
     },

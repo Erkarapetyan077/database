@@ -8,11 +8,9 @@ const { register, login, me } = require("../controllers/auth.controller");
 
 const asyncHandler = require("../utils/asyncHandler");
 
-const authRateLimit = require("../middlewares/authRateLimit")();
+router.post("/register", asyncHandler(register));
 
-router.post("/register", authRateLimit, asyncHandler(register));
-
-router.post("/login", authRateLimit, asyncHandler(login));
+router.post("/login", asyncHandler(login));
 
 router.get("/me", asyncHandler(authenticate), asyncHandler(me));
 
